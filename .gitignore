@@ -13,8 +13,11 @@ local.properties
 # macOS
 .DS_Store
 
-# Logs
+# Logs and debug dumps
 *.log
+build_log.txt
+ksp_log.txt
+window_dump.xml
 
 # APK files (use releases instead)
 *.apk
