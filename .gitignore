@@ -1,0 +1,29 @@
+# Built files
+/build/
+/app/build/
+
+# Local configuration
+local.properties
+
+# IDE
+.idea/
+*.iml
+.gradle/
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+
+# APK files (use releases instead)
+*.apk
+*.aab
+
+# Keystore (never commit signing keys)
+*.jks
+*.keystore
+
+# Backup files
+*.bak
+*~
