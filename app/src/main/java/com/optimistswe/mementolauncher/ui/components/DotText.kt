@@ -164,7 +164,7 @@ private fun calculateLayout(text: String, dotSize: Dp, spacing: Dp): TextLayout 
             val charLayout = CharLayout(char, pattern)
             
             if (char == ' ') {
-                lineWidth += (dotSize * 2)
+                lineWidth += (dotSize * 3)
             } else {
                 val rows = pattern.size
                 val cols = pattern[0].length

@@ -66,10 +66,10 @@ fun LauncherSettingsPanel(
 
     allApps: List<AppInfo>,
     hiddenPackages: Set<String>,
-    onToggleVisibility: (String) -> Unit,
+    onSetHiddenPackages: (Set<String>) -> Unit,
 
     distractingPackages: Set<String>,
-    onToggleDistracting: (String) -> Unit,
+    onSetDistractingPackages: (Set<String>) -> Unit,
     mindfulMessage: String,
     onMindfulMessageChange: (String) -> Unit,
 
@@ -359,18 +359,9 @@ fun LauncherSettingsPanel(
                         onUsageNudgeMinutesChange(bufferedUsageNudgeMinutes)
                         onMindfulMessageChange(bufferedMindfulMessage)
 
-                        // Toggling visibility and distracting apps
-                        // We check difference to call the callbacks or we can just update the whole list
-                        // The current ViewModel expects per-package toggles, but since we are overriding,
-                        // we can just loop through changes. However, for sheer simplicity in this UI pattern,
-                        // we can just call the onToggle for those that changed.
-                        // Better: We should ideally have an onToggleAll or similar, but for now we'll match current.
-                        
-                        hiddenPackages.forEach { pkg: String -> if (!bufferedHiddenPackages.contains(pkg)) onToggleVisibility(pkg) }
-                        bufferedHiddenPackages.forEach { pkg: String -> if (!hiddenPackages.contains(pkg)) onToggleVisibility(pkg) }
-
-                        distractingPackages.forEach { pkg: String -> if (!bufferedDistractingPackages.contains(pkg)) onToggleDistracting(pkg) }
-                        bufferedDistractingPackages.forEach { pkg: String -> if (!distractingPackages.contains(pkg)) onToggleDistracting(pkg) }
+                        // Bulk-write hidden and distracting package sets in a single DataStore transaction each
+                        if (bufferedHiddenPackages != hiddenPackages) onSetHiddenPackages(bufferedHiddenPackages)
+                        if (bufferedDistractingPackages != distractingPackages) onSetDistractingPackages(bufferedDistractingPackages)
 
                         // Apply dock changes
                         if (bufferedDockLeft != dockLeftPkg) onSetDockLeft(bufferedDockLeft)

@@ -87,27 +87,27 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
                     lifeExpectancy = preferences[PreferencesKeys.LIFE_EXPECTANCY]
                         ?: LifeCalendarCalculator.DEFAULT_LIFE_EXPECTANCY,
                     wallpaperTarget = preferences[PreferencesKeys.WALLPAPER_TARGET]
-                        ?.let { WallpaperTarget.valueOf(it) }
+                        ?.let { enumValueOfOrNull<WallpaperTarget>(it) }
                         ?: WallpaperTarget.BOTH,
                     theme = preferences[PreferencesKeys.THEME]
-                        ?.let { CalendarTheme.valueOf(it) }
+                        ?.let { enumValueOfOrNull<CalendarTheme>(it) }
                         ?: CalendarTheme.DARK,
                     dotStyle = preferences[PreferencesKeys.DOT_STYLE]
-                        ?.let { DotStyle.valueOf(it) }
+                        ?.let { enumValueOfOrNull<DotStyle>(it) }
                         ?: DotStyle.FILLED_CIRCLE,
                     backgroundStyle = preferences[PreferencesKeys.BACKGROUND_STYLE]
-                        ?.let { BackgroundStyle.valueOf(it) }
+                        ?.let { enumValueOfOrNull<BackgroundStyle>(it) }
                         ?: BackgroundStyle.MATRIX_GRID,
                     fontSize = preferences[PreferencesKeys.FONT_SIZE]
-                        ?.let { FontSize.valueOf(it) }
+                        ?.let { enumValueOfOrNull<FontSize>(it) }
                         ?: FontSize.MEDIUM,
                     isSetupComplete = preferences[PreferencesKeys.IS_SETUP_COMPLETE] ?: false,
                     autoOpenKeyboard = preferences[PreferencesKeys.AUTO_OPEN_KEYBOARD] ?: true,
                     clockStyle = preferences[PreferencesKeys.CLOCK_STYLE]
-                        ?.let { ClockStyle.valueOf(it) }
+                        ?.let { enumValueOfOrNull<ClockStyle>(it) }
                         ?: ClockStyle.H24,
                     searchBarPosition = preferences[PreferencesKeys.SEARCH_BAR_POSITION]
-                        ?.let { SearchBarPosition.valueOf(it) }
+                        ?.let { enumValueOfOrNull<SearchBarPosition>(it) }
                         ?: SearchBarPosition.TOP,
                     hiddenPackages = preferences[PreferencesKeys.HIDDEN_PACKAGES] ?: emptySet(),
                     distractingPackages = preferences[PreferencesKeys.DISTRACTING_PACKAGES] ?: DEFAULT_DISTRACTING_APPS,
@@ -271,6 +271,24 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
                 updated.add(packageName)
             }
             preferences[PreferencesKeys.DISTRACTING_PACKAGES] = updated
+        }
+    }
+
+    /**
+     * Replaces the entire hidden packages set in a single write.
+     */
+    suspend fun setHiddenPackages(packages: Set<String>) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.HIDDEN_PACKAGES] = packages
+        }
+    }
+
+    /**
+     * Replaces the entire distracting packages set in a single write.
+     */
+    suspend fun setDistractingPackages(packages: Set<String>) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.DISTRACTING_PACKAGES] = packages
         }
     }
 
@@ -483,4 +501,9 @@ enum class ClockStyle {
     H12,
     /** 24-hour format with seconds (e.g., 14:30:45). */
     H24_SEC
+}
+
+/** Safe enum lookup that returns null instead of throwing on unrecognized values. */
+private inline fun <reified T : Enum<T>> enumValueOfOrNull(name: String): T? {
+    return enumValues<T>().firstOrNull { it.name == name }
 }

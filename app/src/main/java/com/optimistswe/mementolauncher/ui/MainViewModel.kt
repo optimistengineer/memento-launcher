@@ -20,6 +20,7 @@ import com.optimistswe.mementolauncher.wallpaper.WallpaperUpdater
 import com.optimistswe.mementolauncher.worker.WallpaperUpdateWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -62,6 +63,8 @@ class MainViewModel @Inject constructor(
 
     var wallpaperSet by mutableStateOf(false)
         private set
+
+    private var generateJob: Job? = null
 
     // Screen dimensions for preview generation
     private var screenWidth = 1080
@@ -207,16 +210,19 @@ class MainViewModel @Inject constructor(
      * @param prefs User preferences for generation
      */
     private fun generateCalendar(prefs: UserPreferences) {
+        generateJob?.cancel()
         isLoading = true
-        viewModelScope.launch {
+        generateJob = viewModelScope.launch {
             try {
                 val birthDate = prefs.birthDate ?: return@launch
                 val metrics = calculator.calculateMetrics(birthDate, prefs.lifeExpectancy)
                 _metrics.value = metrics
 
                 val config = createConfig(prefs.theme, prefs.dotStyle)
-                previewBitmap?.recycle()
+                val oldBitmap = previewBitmap
                 previewBitmap = generator.generate(metrics, config)
+                // Recycle after replacing so Compose never draws a recycled bitmap
+                oldBitmap?.recycle()
             } finally {
                 isLoading = false
             }

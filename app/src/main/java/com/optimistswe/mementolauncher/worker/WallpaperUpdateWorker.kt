@@ -10,6 +10,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.hilt.work.HiltWorker
 import com.optimistswe.mementolauncher.data.CalendarTheme
+import com.optimistswe.mementolauncher.data.DotStyle
 import com.optimistswe.mementolauncher.data.PreferencesRepository
 import com.optimistswe.mementolauncher.domain.LifeCalendarCalculator
 import com.optimistswe.mementolauncher.generator.CalendarConfig
@@ -152,8 +153,8 @@ class WallpaperUpdateWorker @AssistedInject constructor(
             // Get screen dimensions for optimal wallpaper size
             val (width, height) = getScreenDimensions()
 
-            // Create calendar configuration based on theme
-            val config = createConfig(width, height, preferences.theme)
+            // Create calendar configuration based on theme and dot style
+            val config = createConfig(width, height, preferences.theme, preferences.dotStyle)
 
             // Generate the calendar image
             val bitmap = generator.generate(metrics, config)
@@ -198,21 +199,23 @@ class WallpaperUpdateWorker @AssistedInject constructor(
      * @param theme User's selected theme
      * @return Configured [CalendarConfig] for image generation
      */
-    private fun createConfig(width: Int, height: Int, theme: CalendarTheme): CalendarConfig {
+    private fun createConfig(width: Int, height: Int, theme: CalendarTheme, dotStyle: DotStyle): CalendarConfig {
         return when (theme) {
             CalendarTheme.DARK -> CalendarConfig(
                 width = width,
                 height = height,
                 backgroundColor = 0xFF000000.toInt(),
                 filledColor = 0xFFFFFFFF.toInt(),
-                emptyColor = 0xFF4A4A4A.toInt()
+                emptyColor = 0xFF4A4A4A.toInt(),
+                dotStyle = dotStyle
             )
             CalendarTheme.LIGHT -> CalendarConfig(
                 width = width,
                 height = height,
                 backgroundColor = 0xFFFFFFFF.toInt(),
                 filledColor = 0xFF000000.toInt(),
-                emptyColor = 0xFFCCCCCC.toInt()
+                emptyColor = 0xFFCCCCCC.toInt(),
+                dotStyle = dotStyle
             )
         }
     }

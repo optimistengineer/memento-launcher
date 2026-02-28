@@ -539,6 +539,24 @@ class LauncherViewModel @Inject constructor(
     }
 
     /**
+     * Replaces the entire hidden packages set in a single write.
+     */
+    fun setHiddenPackages(packages: Set<String>) {
+        viewModelScope.launch {
+            preferencesRepository.setHiddenPackages(packages)
+        }
+    }
+
+    /**
+     * Replaces the entire distracting packages set in a single write.
+     */
+    fun setDistractingPackages(packages: Set<String>) {
+        viewModelScope.launch {
+            preferencesRepository.setDistractingPackages(packages)
+        }
+    }
+
+    /**
      * Updates the custom mindful delay message.
      */
     fun updateMindfulMessage(message: String) {
