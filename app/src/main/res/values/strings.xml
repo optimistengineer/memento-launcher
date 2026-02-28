@@ -1,4 +1,3 @@
 <resources>
     <string name="app_name">Memento Launcher</string>
-    <string name="accessibility_service_description">Detects short-form content (Shorts, Reels) to help you stay mindful and avoid endless scrolling.</string>
 </resources>

@@ -56,12 +56,6 @@ fun LauncherSettingsPanel(
 
     searchBarPosition: SearchBarPosition,
     onSearchBarPositionChange: (SearchBarPosition) -> Unit,
-    blockShortFormContent: Boolean,
-    onBlockShortFormContentChange: (Boolean) -> Unit,
-    usageNudgeEnabled: Boolean,
-    onUsageNudgeEnabledChange: (Boolean) -> Unit,
-    usageNudgeMinutes: Int,
-    onUsageNudgeMinutesChange: (Int) -> Unit,
     onCreateFolder: (String) -> Unit,
 
     allApps: List<AppInfo>,
@@ -101,9 +95,6 @@ fun LauncherSettingsPanel(
     var bufferedAutoOpenKeyboard by remember { mutableStateOf(autoOpenKeyboard) }
     var bufferedClockStyle by remember { mutableStateOf(clockStyle) }
     var bufferedSearchBarPosition by remember { mutableStateOf(searchBarPosition) }
-    var bufferedBlockShortFormContent by remember { mutableStateOf(blockShortFormContent) }
-    var bufferedUsageNudgeEnabled by remember { mutableStateOf(usageNudgeEnabled) }
-    var bufferedUsageNudgeMinutes by remember { mutableIntStateOf(usageNudgeMinutes) }
     var bufferedHiddenPackages by remember { mutableStateOf(hiddenPackages) }
     var bufferedDistractingPackages by remember { mutableStateOf(distractingPackages) }
     var bufferedMindfulMessage by remember { mutableStateOf(mindfulMessage) }
@@ -211,12 +202,6 @@ fun LauncherSettingsPanel(
                     onAutoOpenKeyboardChange = { bufferedAutoOpenKeyboard = it },
                     searchBarPosition = bufferedSearchBarPosition,
                     onSearchBarPositionChange = { bufferedSearchBarPosition = it },
-                    blockShortFormContent = bufferedBlockShortFormContent,
-                    onBlockShortFormContentChange = { bufferedBlockShortFormContent = it },
-                    usageNudgeEnabled = bufferedUsageNudgeEnabled,
-                    onUsageNudgeEnabledChange = { bufferedUsageNudgeEnabled = it },
-                    usageNudgeMinutes = bufferedUsageNudgeMinutes,
-                    onUsageNudgeMinutesChange = { bufferedUsageNudgeMinutes = it },
                     onBg = onBg, bg = bg, dimmed = dimmed, faint = faint, surface = surface, cardBg = cardBg
                 )
 
@@ -354,9 +339,6 @@ fun LauncherSettingsPanel(
                         onAutoOpenKeyboardChange(bufferedAutoOpenKeyboard)
                         onClockStyleChange(bufferedClockStyle)
                         onSearchBarPositionChange(bufferedSearchBarPosition)
-                        onBlockShortFormContentChange(bufferedBlockShortFormContent)
-                        onUsageNudgeEnabledChange(bufferedUsageNudgeEnabled)
-                        onUsageNudgeMinutesChange(bufferedUsageNudgeMinutes)
                         onMindfulMessageChange(bufferedMindfulMessage)
 
                         // Bulk-write hidden and distracting package sets in a single DataStore transaction each
