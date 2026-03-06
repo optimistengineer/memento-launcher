@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 
 /**
@@ -28,12 +29,20 @@ class AppLabelRepository(private val dataStore: DataStore<Preferences>) {
      * @return A [Flow] emitting a [Map] of package names to custom labels.
      */
     fun getCustomLabels(): Flow<Map<String, String>> {
-        return dataStore.data.map { preferences ->
-            preferences.asMap()
-                .filter { it.key.name.startsWith("label_") }
-                .mapKeys { it.key.name.removePrefix("label_") }
-                .mapValues { it.value as String }
-        }
+        return dataStore.data
+            .catch { exception ->
+                if (exception is java.io.IOException) {
+                    emit(androidx.datastore.preferences.core.emptyPreferences())
+                } else {
+                    throw exception
+                }
+            }
+            .map { preferences ->
+                preferences.asMap()
+                    .filter { it.key.name.startsWith("label_") }
+                    .mapKeys { it.key.name.removePrefix("label_") }
+                    .mapValues { it.value as? String ?: "" }
+            }
     }
 
     /**

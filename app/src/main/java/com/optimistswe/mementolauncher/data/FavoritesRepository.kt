@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 
 /**
@@ -83,11 +84,19 @@ class FavoritesRepository(private val dataStore: DataStore<Preferences>) {
 
     /** Returns a [Flow] of favorite app package names. */
     fun getFavorites(): Flow<List<String>> {
-        return dataStore.data.map { preferences ->
-            val raw = preferences[FAVORITES_KEY] ?: ""
-            if (raw.isBlank()) emptyList()
-            else raw.split(",").filter { it.isNotBlank() }
-        }
+        return dataStore.data
+            .catch { exception ->
+                if (exception is java.io.IOException) {
+                    emit(androidx.datastore.preferences.core.emptyPreferences())
+                } else {
+                    throw exception
+                }
+            }
+            .map { preferences ->
+                val raw = preferences[FAVORITES_KEY] ?: ""
+                if (raw.isBlank()) emptyList()
+                else raw.split(",").filter { it.isNotBlank() }
+            }
     }
 
     /** Seeds the favorites list with common default apps (Phone, Messages, Camera) on first launch. */
@@ -159,12 +168,28 @@ class FavoritesRepository(private val dataStore: DataStore<Preferences>) {
 
     /** Flow of left dock app package name (nullable). */
     fun getDockLeftApp(): Flow<String?> {
-        return dataStore.data.map { it[DOCK_LEFT_KEY] }
+        return dataStore.data
+            .catch { exception ->
+                if (exception is java.io.IOException) {
+                    emit(androidx.datastore.preferences.core.emptyPreferences())
+                } else {
+                    throw exception
+                }
+            }
+            .map { it[DOCK_LEFT_KEY] }
     }
 
     /** Flow of right dock app package name (nullable). */
     fun getDockRightApp(): Flow<String?> {
-        return dataStore.data.map { it[DOCK_RIGHT_KEY] }
+        return dataStore.data
+            .catch { exception ->
+                if (exception is java.io.IOException) {
+                    emit(androidx.datastore.preferences.core.emptyPreferences())
+                } else {
+                    throw exception
+                }
+            }
+            .map { it[DOCK_RIGHT_KEY] }
     }
 
     /** Sets the left corner dock app. Pass null to clear. */

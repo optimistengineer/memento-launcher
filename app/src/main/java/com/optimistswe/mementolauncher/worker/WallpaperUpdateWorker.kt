@@ -158,6 +158,7 @@ class WallpaperUpdateWorker @AssistedInject constructor(
 
             // Generate the calendar image
             val bitmap = generator.generate(metrics, config)
+                ?: return Result.failure() // OOM — permanent failure, don't retry
 
             try {
                 // Set as wallpaper
@@ -172,9 +173,8 @@ class WallpaperUpdateWorker @AssistedInject constructor(
                 bitmap.recycle()
             }
         } catch (e: Exception) {
-            // Log error for debugging
             e.printStackTrace()
-            Result.retry()
+            if (runAttemptCount >= 3) Result.failure() else Result.retry()
         }
     }
 

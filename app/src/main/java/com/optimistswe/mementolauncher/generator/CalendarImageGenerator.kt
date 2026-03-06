@@ -39,19 +39,28 @@ class CalendarImageGenerator {
      * @param config Visual configuration for the calendar
      * @return A [Bitmap] ready to be set as wallpaper
      */
-    fun generate(metrics: CalendarMetrics, config: CalendarConfig): Bitmap {
-        val bitmap = Bitmap.createBitmap(config.width, config.height, Bitmap.Config.RGB_565)
+    fun generate(metrics: CalendarMetrics, config: CalendarConfig): Bitmap? {
+        val safeWidth = config.width.coerceIn(1, 4096)
+        val safeHeight = config.height.coerceIn(1, 8192)
+        val bitmap = try {
+            Bitmap.createBitmap(safeWidth, safeHeight, Bitmap.Config.RGB_565)
+        } catch (e: OutOfMemoryError) {
+            return null
+        }
         val canvas = Canvas(bitmap)
 
         // Draw background
         canvas.drawColor(config.backgroundColor)
 
-        // Calculate layout
-        val layout = calculateLayout(metrics.lifeExpectancy, config)
+        // Calculate layout using safe dimensions
+        val safeConfig = if (safeWidth != config.width || safeHeight != config.height) {
+            config.copy(width = safeWidth, height = safeHeight)
+        } else config
+        val layout = calculateLayout(metrics.lifeExpectancy, safeConfig)
 
         // Draw in order: labels first, then grid on top
-        drawLabels(canvas, layout, config)
-        drawGrid(canvas, metrics, layout, config)
+        drawLabels(canvas, layout, safeConfig)
+        drawGrid(canvas, metrics, layout, safeConfig)
 
         return bitmap
     }

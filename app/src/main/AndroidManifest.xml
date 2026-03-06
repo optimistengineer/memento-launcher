@@ -8,9 +8,6 @@
     <!-- Permission to request app uninstallation -->
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
 
-    <!-- Permission to expand notification panel on swipe down (auto-granted, no user prompt) -->
-    <uses-permission android:name="android.permission.EXPAND_STATUS_BAR" />
-
     <!-- Permission to query screen time usage stats (requires manual user grant in Settings) -->
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
 

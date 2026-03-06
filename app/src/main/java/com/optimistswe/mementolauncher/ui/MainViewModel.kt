@@ -220,9 +220,12 @@ class MainViewModel @Inject constructor(
 
                 val config = createConfig(prefs.theme, prefs.dotStyle)
                 val oldBitmap = previewBitmap
-                previewBitmap = generator.generate(metrics, config)
-                // Recycle after replacing so Compose never draws a recycled bitmap
-                oldBitmap?.recycle()
+                val newBitmap = generator.generate(metrics, config)
+                if (newBitmap != null) {
+                    previewBitmap = newBitmap
+                    // Recycle after replacing so Compose never draws a recycled bitmap
+                    oldBitmap?.recycle()
+                }
             } finally {
                 isLoading = false
             }

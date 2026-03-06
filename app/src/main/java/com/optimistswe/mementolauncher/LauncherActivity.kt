@@ -83,10 +83,14 @@ class LauncherActivity : ComponentActivity() {
      * Launches an app by its package name.
      */
     private fun launchApp(packageName: String) {
-        val intent = packageManager.getLaunchIntentForPackage(packageName)
-        if (intent != null) {
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            startActivity(intent)
+        try {
+            val intent = packageManager.getLaunchIntentForPackage(packageName)
+            if (intent != null) {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(intent)
+            }
+        } catch (_: Exception) {
+            // App may have been uninstalled between tap and launch
         }
     }
 }

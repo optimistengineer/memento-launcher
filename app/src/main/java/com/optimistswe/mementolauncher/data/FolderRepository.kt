@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
@@ -36,10 +37,18 @@ class FolderRepository(private val dataStore: DataStore<Preferences>) {
      *
      * Emits an empty list initially if no folders exist or if decoding fails.
      */
-    val folders: Flow<List<AppFolder>> = dataStore.data.map { preferences ->
-        val jsonString = preferences[PreferencesKeys.FOLDERS] ?: "[]"
-        parseFoldersJson(jsonString)
-    }
+    val folders: Flow<List<AppFolder>> = dataStore.data
+        .catch { exception ->
+            if (exception is java.io.IOException) {
+                emit(androidx.datastore.preferences.core.emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            val jsonString = preferences[PreferencesKeys.FOLDERS] ?: "[]"
+            parseFoldersJson(jsonString)
+        }
 
     /**
      * Creates a new folder with the given name.
