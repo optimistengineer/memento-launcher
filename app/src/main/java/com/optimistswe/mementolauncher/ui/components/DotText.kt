@@ -65,7 +65,7 @@ fun DotText(
 
             line.chars.forEach { charItem ->
                 if (charItem.char == ' ') {
-                    currentX += (dotPx * 2) + dotPx // Match spacing between chars
+                    currentX += (dotPx * 2) + dotPx * 1.5f // Match spacing between chars
                 } else {
                     val pattern = charItem.pattern
                     val charRows = pattern.size
@@ -84,7 +84,7 @@ fun DotText(
                             }
                         }
                     }
-                    currentX += (charCols * dotPx) + ((charCols - 1).coerceAtLeast(0) * spacePx) + dotPx
+                    currentX += (charCols * dotPx) + ((charCols - 1).coerceAtLeast(0) * spacePx) + dotPx * 1.5f
                 }
             }
             currentY += line.height.toPx() + (dotPx * 2) // Line spacing
@@ -164,7 +164,7 @@ private fun calculateLayout(text: String, dotSize: Dp, spacing: Dp): TextLayout 
             val charLayout = CharLayout(char, pattern)
             
             if (char == ' ') {
-                lineWidth += (dotSize * 3)
+                lineWidth += (dotSize * 3.5f)
             } else {
                 val rows = pattern.size
                 val cols = pattern[0].length
@@ -174,7 +174,7 @@ private fun calculateLayout(text: String, dotSize: Dp, spacing: Dp): TextLayout 
             }
             
             if (index < line.length - 1) {
-                lineWidth += dotSize // space between chars
+                lineWidth += dotSize * 1.5f // space between chars
             }
             charLayout
         }
