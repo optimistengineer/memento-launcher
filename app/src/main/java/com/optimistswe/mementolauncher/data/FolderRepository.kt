@@ -198,7 +198,7 @@ class FolderRepository(private val dataStore: DataStore<Preferences>) {
         return try {
             json.decodeFromString(jsonString)
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.e("FolderRepository", "Failed to parse folders JSON", e)
             emptyList()
         }
     }

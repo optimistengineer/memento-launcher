@@ -143,11 +143,13 @@ object AppModule {
     }
 
     @Provides
+    @Singleton
     fun provideTimeManager(): TimeManager {
         return TimeManager()
     }
 
     @Provides
+    @Singleton
     fun provideWidgetManager(@ApplicationContext context: Context): WidgetManager {
         return WidgetManager(context)
     }

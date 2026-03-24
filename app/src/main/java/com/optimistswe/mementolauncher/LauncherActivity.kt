@@ -5,7 +5,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.activity.viewModels
 import com.optimistswe.mementolauncher.data.AppLabelRepository
 import com.optimistswe.mementolauncher.data.AppRepository
 import com.optimistswe.mementolauncher.data.FavoritesRepository
@@ -25,7 +25,7 @@ import dagger.hilt.android.AndroidEntryPoint
 @AndroidEntryPoint
 class LauncherActivity : ComponentActivity() {
 
-    private lateinit var viewModel: LauncherViewModel
+    private val viewModel: LauncherViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -34,9 +34,8 @@ class LauncherActivity : ComponentActivity() {
         //     android.view.WindowManager.LayoutParams.FLAG_SECURE,
         //     android.view.WindowManager.LayoutParams.FLAG_SECURE
         // )
-        
+
         enableEdgeToEdge()
-        viewModel = androidx.lifecycle.ViewModelProvider(this)[LauncherViewModel::class.java]
 
         handleIntent(intent)
 

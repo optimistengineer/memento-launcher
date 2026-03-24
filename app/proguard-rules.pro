@@ -10,6 +10,7 @@
 
 # Keep Hilt-generated components
 -keep class com.optimistswe.mementolauncher.di.** { *; }
+-keep class * implements dagger.hilt.internal.GeneratedComponent
 
 # Keep kotlinx.serialization classes
 -keepattributes *Annotation*, InnerClasses
@@ -17,3 +18,10 @@
 -keepclasseswithmembers class com.optimistswe.mementolauncher.** {
     kotlinx.serialization.KSerializer serializer(...);
 }
+
+# Keep generated serializer companions
+-keepclassmembers class com.optimistswe.mementolauncher.data.** {
+    *** Companion;
+}
+-keep class com.optimistswe.mementolauncher.data.**$serializer { *; }
+-keep class com.optimistswe.mementolauncher.data.**$$serializer { *; }

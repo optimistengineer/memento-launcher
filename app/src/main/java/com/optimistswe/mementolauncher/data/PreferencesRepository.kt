@@ -389,6 +389,8 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
         dataStore.edit { preferences ->
             if (birthDate != null) {
                 preferences[PreferencesKeys.BIRTH_DATE_EPOCH_DAYS] = birthDate.toEpochDay()
+            } else {
+                preferences.remove(PreferencesKeys.BIRTH_DATE_EPOCH_DAYS)
             }
             preferences[PreferencesKeys.LIFE_EXPECTANCY] = lifeExpectancy
             preferences[PreferencesKeys.WALLPAPER_TARGET] = wallpaperTarget.name

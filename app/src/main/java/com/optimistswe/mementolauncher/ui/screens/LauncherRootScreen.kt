@@ -90,12 +90,19 @@ fun LauncherRootScreen(
         if (preferences?.clockStyle == com.optimistswe.mementolauncher.data.ClockStyle.H24_SEC) 1_000L else 30_000L
     }
 
-    // Periodically refreshes the clock and system widgets while the root screen is active.
+    // Periodically refreshes the clock while the root screen is active.
     LaunchedEffect(clockIntervalMs) {
         while (true) {
             viewModel.refreshClock()
-            viewModel.refreshWidgets()
             delay(clockIntervalMs)
+        }
+    }
+
+    // Refresh system widgets (alarm, screen time) at a slower interval since they change infrequently.
+    LaunchedEffect(Unit) {
+        while (true) {
+            viewModel.refreshWidgets()
+            delay(60_000L)
         }
     }
 

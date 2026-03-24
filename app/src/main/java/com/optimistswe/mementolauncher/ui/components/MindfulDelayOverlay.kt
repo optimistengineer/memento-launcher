@@ -34,10 +34,10 @@ fun MindfulDelayOverlay(
     val onBg = MaterialTheme.colorScheme.onBackground
     val dimmed = onBg.copy(alpha = 0.5f)
 
-    var remainingSeconds by remember { mutableIntStateOf(5) }
-    var countdownFinished by remember { mutableStateOf(false) }
+    var remainingSeconds by remember(appName) { mutableIntStateOf(5) }
+    var countdownFinished by remember(appName) { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(appName) {
         while (remainingSeconds > 0) {
             delay(1000L)
             remainingSeconds--
@@ -50,12 +50,10 @@ fun MindfulDelayOverlay(
         val lines = mutableListOf<String>()
         var currentLine = ""
         val maxCharsPerLine = 12 // Slightly tighter for better vertical stacking
-        
+
         for (i in words.indices) {
             val word = words[i]
-            val nextWord = if (i + 1 < words.size) words[i+1] else null
-            
-            // Heuristic: if next word is just a question mark, keep it with this line
+
             val forceWrap = currentLine.isNotEmpty() && (currentLine.length + word.length + 1 > maxCharsPerLine)
             
             if (forceWrap) {

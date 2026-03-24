@@ -223,8 +223,11 @@ class MainViewModel @Inject constructor(
                 val newBitmap = generator.generate(metrics, config)
                 if (newBitmap != null) {
                     previewBitmap = newBitmap
-                    // Recycle after replacing so Compose never draws a recycled bitmap
-                    oldBitmap?.recycle()
+                    // Delay recycle to give Compose time to stop referencing the old bitmap
+                    if (oldBitmap != null) {
+                        kotlinx.coroutines.delay(500)
+                        oldBitmap.recycle()
+                    }
                 }
             } finally {
                 isLoading = false
