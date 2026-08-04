@@ -44,6 +44,7 @@ fun LauncherSettingsPanel(
     birthDate: LocalDate?,
     lifeExpectancy: Int,
     showLifeCalendar: Boolean = true,
+    hasUsageAccess: Boolean = false,
     onShowLifeCalendarChange: (Boolean) -> Unit = {},
     onBirthDateChange: (LocalDate) -> Unit,
     onLifeExpectancyChange: (Int) -> Unit,
@@ -203,6 +204,7 @@ fun LauncherSettingsPanel(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 BehaviorSettings(
+                    hasUsageAccess = hasUsageAccess,
                     autoOpenKeyboard = bufferedAutoOpenKeyboard,
                     onAutoOpenKeyboardChange = { bufferedAutoOpenKeyboard = it },
                     searchBarPosition = bufferedSearchBarPosition,

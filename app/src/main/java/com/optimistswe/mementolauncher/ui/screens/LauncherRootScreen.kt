@@ -346,6 +346,7 @@ fun LauncherRootScreen(
                         birthDate = preferences?.birthDate,
                         lifeExpectancy = preferences?.lifeExpectancy ?: 80,
                         showLifeCalendar = showCalendar,
+                        hasUsageAccess = viewModel.hasUsagePermission(),
                         onShowLifeCalendarChange = { viewModel.updateShowLifeCalendar(it) },
                         onBirthDateChange = { viewModel.updateBirthDate(it) },
                         onLifeExpectancyChange = { viewModel.updateLifeExpectancy(it) },
