@@ -28,6 +28,16 @@ class TimeManager {
     /** A flow emitting the current date formatted as "EEE d MMM" (e.g., "MON 23 FEB"). */
     val currentDate: StateFlow<String> = _currentDate.asStateFlow()
 
+    private val _today = MutableStateFlow(LocalDate.now())
+    /**
+     * Today's date, as a value rather than a formatted string.
+     *
+     * Anything derived from the calendar date — weeks lived, whether it is the user's birthday —
+     * must observe this instead of calling LocalDate.now() once. A launcher process runs for days,
+     * so a value captured at startup goes stale at the next midnight and never recovers.
+     */
+    val today: StateFlow<LocalDate> = _today.asStateFlow()
+
     /**
      * Updates the internal [ClockStyle] and refreshes the [currentTime] state.
      *
@@ -42,8 +52,11 @@ class TimeManager {
      * Forces a refresh of the [currentTime] and [currentDate] flows with the latest system time.
      */
     fun refresh() {
+        val now = LocalDate.now()
         _currentTime.value = formatTime(LocalTime.now())
-        _currentDate.value = formatDate(LocalDate.now())
+        _currentDate.value = formatDate(now)
+        // Drives recomputation of everything date-derived when the day rolls over.
+        _today.value = now
     }
 
     /**

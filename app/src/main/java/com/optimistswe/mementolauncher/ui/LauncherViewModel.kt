@@ -97,13 +97,13 @@ class LauncherViewModel @Inject constructor(
      * True only on the user's birthday (month + day match today).
      * Derived from the single shared preferences flow to avoid redundant DataStore subscriptions.
      */
-    val isBirthday: StateFlow<Boolean> = preferences
-        .filterNotNull()
-        .map { prefs ->
-            val birthDate = prefs.birthDate ?: return@map false
-            val today = java.time.LocalDate.now()
-            birthDate.monthValue == today.monthValue && birthDate.dayOfMonth == today.dayOfMonth
-        }
+    val isBirthday: StateFlow<Boolean> = combine(
+        preferences.filterNotNull(),
+        timeManager.today
+    ) { prefs, today ->
+        val birthDate = prefs.birthDate ?: return@combine false
+        birthDate.monthValue == today.monthValue && birthDate.dayOfMonth == today.dayOfMonth
+    }
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
@@ -270,7 +270,13 @@ class LauncherViewModel @Inject constructor(
      */
     private fun observePreferencesDerived() {
         viewModelScope.launch {
-            preferences.filterNotNull().collect { prefs ->
+            // Combined with today's date: the metrics are a function of (preferences, date), and
+            // the preferences flow is DataStore-backed so it only emits when a setting is written.
+            // Observing it alone froze the weeks-lived counter and the whole dot grid at whatever
+            // they were when the process started — for a HOME app, potentially for days.
+            combine(preferences.filterNotNull(), timeManager.today) { prefs, today ->
+                prefs to today
+            }.collect { (prefs, today) ->
                 // Update clock style
                 timeManager.updateClockStyle(prefs.clockStyle)
 
@@ -284,8 +290,9 @@ class LauncherViewModel @Inject constructor(
                 // Assigning _lifeMetrics unconditionally also clears stale metrics when the birth
                 // date is removed; previously only the progress text was reset.
                 val metrics = prefs.birthDate?.let { birthDate ->
-                    runCatching { calculator.calculateMetrics(birthDate, prefs.lifeExpectancy) }
-                        .getOrNull()
+                    runCatching {
+                        calculator.calculateMetrics(birthDate, prefs.lifeExpectancy, today)
+                    }.getOrNull()
                 }
                 _lifeMetrics.value = metrics
                 _lifeProgressText.value =

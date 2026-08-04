@@ -38,6 +38,7 @@ class LauncherViewModelTest {
     private val folderRepository = mockk<FolderRepository>(relaxed = true)
     private val backupManager = mockk<BackupManager>(relaxed = true)
     private val timeManager = mockk<TimeManager>(relaxed = true)
+    private val todayFlow = MutableStateFlow(LocalDate.now())
     private val widgetManager = mockk<WidgetManager>(relaxed = true)
 
     private lateinit var viewModel: LauncherViewModel
@@ -69,6 +70,7 @@ class LauncherViewModelTest {
             usageNudgeEnabled = false,
             usageNudgeMinutes = 15
         )
+        every { timeManager.today } returns todayFlow
         every { preferencesRepository.getUserPreferences() } returns flowOf(defaultPrefs)
         every { appLabelRepository.getCustomLabels() } returns flowOf(emptyMap())
         every { folderRepository.folders } returns flowOf(emptyList())
@@ -606,6 +608,57 @@ class LauncherViewModelTest {
                 .sorted()
 
             assertEquals(listOf("Alpha", "Beta"), folderNames)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    // Date rollover
+    // ═══════════════════════════════════════════
+
+    @Test
+    fun `life metrics recompute when the date rolls over`() {
+        // The preferences flow is DataStore-backed and only emits on a write, so metrics used to
+        // freeze at process start. A launcher process runs for days.
+        val born = LocalDate.of(1990, 5, 15)
+        every { preferencesRepository.getUserPreferences() } returns flowOf(prefs(birthDate = born))
+        todayFlow.value = LocalDate.of(2026, 8, 5)
+
+        createViewModel()
+        testDispatcher.scheduler.advanceUntilIdle()
+        val before = viewModel.lifeMetrics.value
+        assertNotNull(before)
+
+        // Seven days later the user has lived exactly one more week.
+        todayFlow.value = LocalDate.of(2026, 8, 12)
+        testDispatcher.scheduler.advanceUntilIdle()
+        val after = viewModel.lifeMetrics.value
+
+        assertNotNull(after)
+        assertEquals(
+            "weeks lived must advance with the date",
+            before!!.weeksLived + 1,
+            after!!.weeksLived
+        )
+        assertEquals("WEEK ${after.weeksLived} OF ${after.totalWeeks}", viewModel.lifeProgressText.value)
+    }
+
+    @Test
+    fun `isBirthday flips when the date reaches the birthday`() = runTest {
+        val born = LocalDate.of(1990, 8, 12)
+        every { preferencesRepository.getUserPreferences() } returns flowOf(prefs(birthDate = born))
+        todayFlow.value = LocalDate.of(2026, 8, 11)
+
+        createViewModel()
+
+        // isBirthday is stateIn(WhileSubscribed), so it only recomputes while collected —
+        // reading .value without a subscriber always yields the initial false.
+        viewModel.isBirthday.test {
+            assertFalse("not the birthday yet", awaitItem())
+
+            todayFlow.value = LocalDate.of(2026, 8, 12)
+            assertTrue("midnight rollover must trigger the birthday", awaitItem())
+
             cancelAndIgnoreRemainingEvents()
         }
     }
