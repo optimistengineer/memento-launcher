@@ -70,13 +70,17 @@ class LauncherActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * Override back press to do nothing — standard launcher behavior.
-     */
-    @Deprecated("Deprecated in Java")
-    override fun onBackPressed() {
-        // Do nothing — this IS the home screen
-    }
+    // NOTE: deliberately no onBackPressed() override.
+    //
+    // ComponentActivity.onBackPressed() is what drives onBackPressedDispatcher below API 33.
+    // Overriding it with an empty body (as this class used to) swallowed back entirely on
+    // API 26-32, so the BackHandler in LauncherRootScreen never ran there: the settings panel
+    // could not be dismissed with back, and back would not return from the app drawer to home.
+    // On API 33+ enableOnBackInvokedCallback routes around onBackPressed(), which is why the
+    // two paths behaved differently.
+    //
+    // "Back does nothing on the home page" is now enforced by that BackHandler staying enabled
+    // and consuming the event, which works identically on every supported API level.
 
     /**
      * Launches an app by its package name.

@@ -119,8 +119,11 @@ fun AppDrawerScreen(
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    // Handle auto-focus and keyboard (moved here so position toggle doesn't re-trigger it)
-    LaunchedEffect(isVisible) {
+    // Handle auto-focus and keyboard (moved here so position toggle doesn't re-trigger it).
+    // Keyed on autoOpenKeyboard too: the settings panel is opened from this screen, so isVisible
+    // stays true while the user toggles the setting. Without the key the change had no effect
+    // until they swiped away from the drawer and back.
+    LaunchedEffect(isVisible, autoOpenKeyboard) {
         if (isVisible) {
             if (autoOpenKeyboard) {
                 focusRequester.requestFocus()

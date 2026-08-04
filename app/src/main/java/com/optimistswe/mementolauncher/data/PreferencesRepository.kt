@@ -80,12 +80,27 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
             }
             .map { preferences ->
                 val epochDays = preferences[PreferencesKeys.BIRTH_DATE_EPOCH_DAYS]
-                val birthDate = epochDays?.let { LocalDate.ofEpochDay(it) }
+                // LocalDate.ofEpochDay throws DateTimeException outside its supported range.
+                // This map runs DOWNSTREAM of the .catch above, which only sees errors from
+                // dataStore.data — so a throw here escapes the flow entirely. Since the bad
+                // value is persisted, it would rethrow on every start, and for a HOME app that
+                // leaves the device with no usable launcher until app data is cleared.
+                // restoreAll writes this value straight from backup JSON without validating it.
+                val birthDate = epochDays?.let { days ->
+                    runCatching { LocalDate.ofEpochDay(days) }.getOrNull()
+                }
 
                 UserPreferences(
                     birthDate = birthDate,
-                    lifeExpectancy = preferences[PreferencesKeys.LIFE_EXPECTANCY]
-                        ?: LifeCalendarCalculator.DEFAULT_LIFE_EXPECTANCY,
+                    // Clamped on read: the settings UI enforces this range but restoreAll does
+                    // not, and a value of 0 makes totalWeeks 0 — percentageLived then divides
+                    // by zero and renders as "NaN%" or a false "100%".
+                    lifeExpectancy = (preferences[PreferencesKeys.LIFE_EXPECTANCY]
+                        ?: LifeCalendarCalculator.DEFAULT_LIFE_EXPECTANCY)
+                        .coerceIn(
+                            LifeCalendarCalculator.MIN_LIFE_EXPECTANCY,
+                            LifeCalendarCalculator.MAX_LIFE_EXPECTANCY
+                        ),
                     wallpaperTarget = preferences[PreferencesKeys.WALLPAPER_TARGET]
                         ?.let { enumValueOfOrNull<WallpaperTarget>(it) }
                         ?: WallpaperTarget.BOTH,

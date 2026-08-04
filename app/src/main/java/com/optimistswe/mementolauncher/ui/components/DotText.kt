@@ -81,12 +81,18 @@ fun DotText(
                     val pattern = charItem.pattern
                     val charRows = pattern.size
                     val charCols = pattern[0].length
-                    
+
+                    // Sit every glyph on a shared baseline. Laying out from the top of the line
+                    // instead makes any glyph shorter than the tallest one float, and any taller
+                    // one hang below its neighbours. The font is uniformly 5 rows today, so this
+                    // is normally zero — it keeps mixed-height glyphs correct if any are added.
+                    val baselineOffset = (line.maxRows - charRows) * (dotPx + spacePx)
+
                     for (r in 0 until charRows) {
                         for (c in 0 until charCols) {
                             if (pattern[r][c] == 'X') {
                                 val x = currentX + c * (dotPx + spacePx) + radius
-                                val y = currentY + r * (dotPx + spacePx) + radius
+                                val y = currentY + baselineOffset + r * (dotPx + spacePx) + radius
                                 drawCircle(
                                     color = color,
                                     radius = radius,
@@ -157,6 +163,8 @@ private data class TextLayout(
 private data class LineLayout(
     val width: Dp,
     val height: Dp,
+    /** Tallest glyph on the line, in dot rows. Used to sit every glyph on a shared baseline. */
+    val maxRows: Int,
     val chars: List<CharLayout>
 )
 
@@ -170,10 +178,11 @@ private fun calculateLayout(text: String, dotSize: Dp, spacing: Dp): TextLayout 
     val lineLayouts = lines.map { line ->
         var lineWidth = 0.dp
         var maxHeight = 0.dp
+        var maxRows = 0
         val charLayouts = line.mapIndexed { index, char ->
             val pattern = getPattern(char)
             val charLayout = CharLayout(char, pattern)
-            
+
             if (char == ' ') {
                 lineWidth += (dotSize * 3.5f)
             } else {
@@ -182,14 +191,15 @@ private fun calculateLayout(text: String, dotSize: Dp, spacing: Dp): TextLayout 
                 lineWidth += (dotSize * cols) + (spacing * (cols - 1))
                 val charHeight = (dotSize * rows) + (spacing * (rows - 1))
                 if (charHeight > maxHeight) maxHeight = charHeight
+                if (rows > maxRows) maxRows = rows
             }
-            
+
             if (index < line.length - 1) {
                 lineWidth += dotSize * 1.5f // space between chars
             }
             charLayout
         }
-        LineLayout(lineWidth, maxHeight, charLayouts)
+        LineLayout(lineWidth, maxHeight, maxRows, charLayouts)
     }
 
     val totalWidth = lineLayouts.maxOfOrNull { it.width.value }?.dp ?: 0.dp
@@ -201,16 +211,19 @@ private fun calculateLayout(text: String, dotSize: Dp, spacing: Dp): TextLayout 
 
 private fun getPattern(char: Char): List<String> {
     return when (char.uppercaseChar()) {
-        '0' -> listOf(".XX.", "X..X", "X..X", "X..X", "X..X", ".XX.")
-        '1' -> listOf(".X.", "XX.", ".X.", ".X.", ".X.", "XXX")
-        '2' -> listOf(".XX.", "X..X", "...X", "..X.", ".X..", "XXXX")
-        '3' -> listOf(".XX.", "X..X", "..X.", "...X", "X..X", ".XX.")
-        '4' -> listOf("X..X", "X..X", "XXXX", "...X", "...X", "...X")
-        '5' -> listOf("XXXX", "X...", "XXX.", "...X", "X..X", ".XX.")
-        '6' -> listOf(".XX.", "X...", "XXX.", "X..X", "X..X", ".XX.")
-        '7' -> listOf("XXXX", "...X", "..X.", ".X..", ".X..", ".X..")
-        '8' -> listOf(".XX.", "X..X", ".XX.", "X..X", "X..X", ".XX.")
-        '9' -> listOf(".XX.", "X..X", "X..X", ".XXX", "...X", ".XX.")
+        // Digits are 5 rows to match the letters' cap height. They used to be 6, and because
+        // glyphs are laid out from the top of the line, every digit dropped one dot-row below
+        // the letters beside it — visible in strings like "WED 5 AUG" or "WEEK 1877 OF 4160".
+        '0' -> listOf(".XX.", "X..X", "X..X", "X..X", ".XX.")
+        '1' -> listOf(".X..", "XX..", ".X..", ".X..", "XXX.")
+        '2' -> listOf(".XX.", "X..X", "..X.", ".X..", "XXXX")
+        '3' -> listOf("XXX.", "...X", ".XX.", "...X", "XXX.")
+        '4' -> listOf("X..X", "X..X", "XXXX", "...X", "...X")
+        '5' -> listOf("XXXX", "X...", "XXX.", "...X", "XXX.")
+        '6' -> listOf(".XX.", "X...", "XXX.", "X..X", ".XX.")
+        '7' -> listOf("XXXX", "...X", "..X.", ".X..", ".X..")
+        '8' -> listOf(".XX.", "X..X", ".XX.", "X..X", ".XX.")
+        '9' -> listOf(".XX.", "X..X", ".XXX", "...X", ".XX.")
         'A' -> listOf(".XX.", "X..X", "XXXX", "X..X", "X..X")
         'B' -> listOf("XXX.", "X..X", "XXX.", "X..X", "XXX.")
         'C' -> listOf(".XXX", "X...", "X...", "X...", ".XXX")
@@ -237,10 +250,10 @@ private fun getPattern(char: Char): List<String> {
         'X' -> listOf("X...X", ".X.X.", "..X..", ".X.X.", "X...X")
         'Y' -> listOf("X..X", ".XX.", "..X.", "..X.", "..X.")
         'Z' -> listOf("XXXX", "...X", "..X.", ".X..", "XXXX")
-        '.' -> listOf("....", "....", "....", "....", "....", ".X..")
-        '%' -> listOf("X..X", "..X.", ".X..", "X..X", "....", "....")
-        '!' -> listOf(".X.", ".X.", ".X.", "...", ".X.", "...")
-        '*' -> listOf("..X.X..", ".XX.XX.", "XX...XX", ".X...X.", "XX...XX", ".XX.XX.", "..X.X..")
+        '.' -> listOf("....", "....", "....", "....", ".X..")
+        '%' -> listOf("X..X", "...X", "..X.", ".X..", "X..X")
+        '!' -> listOf(".X.", ".X.", ".X.", "...", ".X.")
+        '*' -> listOf("..X..", "X.X.X", ".XXX.", "X.X.X", "..X..")
         '<' -> listOf("...X", "..X.", ".X..", "..X.", "...X")
         '>' -> listOf("X...", ".X..", "..X.", ".X..", "X...")
         '[' -> listOf("XX", "X.", "X.", "X.", "XX")
@@ -250,8 +263,8 @@ private fun getPattern(char: Char): List<String> {
         '+' -> listOf("...", ".X.", "XXX", ".X.", "...")
         '-' -> listOf("...", "...", "XXX", "...", "...")
         ':' -> listOf("...", ".X.", "...", ".X.", "...")
-        '/' -> listOf("...X", "..X.", ".X..", "X...")
-        '?' -> listOf(".XX.", "X..X", "...X", "..X.", "....", "..X.")
-        else -> listOf("....", ".XX.", "....", ".XX.", "....", "....")
+        '/' -> listOf("...X", "..X.", "..X.", ".X..", "X...")
+        '?' -> listOf(".XX.", "X..X", "..X.", "....", "..X.")
+        else -> listOf("....", ".XX.", "....", ".XX.", "....")
     }
 }

@@ -11,6 +11,11 @@
     <!-- Permission to query screen time usage stats (requires manual user grant in Settings) -->
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
 
+    <!-- Required by StatusBarManager.expandNotificationsPanel(), used for the home screen
+         pull-down gesture. Normal permission, granted at install with no user prompt.
+         Without it the call throws SecurityException and the gesture silently does nothing. -->
+    <uses-permission android:name="android.permission.EXPAND_STATUS_BAR" />
+
     <!-- Launcher visibility: see apps with MAIN/LAUNCHER intent (no broad QUERY_ALL_PACKAGES) -->
     <queries>
         <intent>

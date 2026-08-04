@@ -222,15 +222,22 @@ fun LauncherRootScreen(
                     }
                 }
 
-                BackHandler(enabled = showSettingsDialog || pagerState.currentPage != 1) {
-                    if (showSettingsDialog) {
-                        showSettingsDialog = false
-                    } else {
-                        keyboardController?.hide()
-                        focusManager.clearFocus()
-                        coroutineScope.launch {
-                            pagerState.animateScrollToPage(1)
+                // Always enabled so this consumes back on every API level. Leaving it disabled
+                // on the home page would let back fall through and finish the activity on
+                // API 33+; this is what keeps "back does nothing on home" true now that
+                // LauncherActivity no longer swallows onBackPressed().
+                BackHandler(enabled = true) {
+                    when {
+                        showSettingsDialog -> showSettingsDialog = false
+                        pagerState.currentPage != 1 -> {
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                            coroutineScope.launch {
+                                pagerState.animateScrollToPage(1)
+                            }
                         }
+                        // Already on the home page — this IS the home screen, so do nothing.
+                        else -> Unit
                     }
                 }
 

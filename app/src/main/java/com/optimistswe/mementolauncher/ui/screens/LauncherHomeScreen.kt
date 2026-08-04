@@ -58,18 +58,6 @@ fun LauncherHomeScreen(
     val dimmed = onBg.copy(alpha = 0.35f)
     val faint = onBg.copy(alpha = 0.15f)
 
-    // Pulsing alpha for birthday message
-    val birthdayTransition = rememberInfiniteTransition(label = "birthday")
-    val birthdayAlpha by birthdayTransition.animateFloat(
-        initialValue = 0.4f,
-        targetValue = 1.0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "birthdayAlpha"
-    )
-
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -114,12 +102,7 @@ fun LauncherHomeScreen(
 
             // BIRTHDAY
             if (isBirthday) {
-                DotText(
-                    text = "HAPPY BIRTHDAY",
-                    color = onBg.copy(alpha = birthdayAlpha),
-                    dotSize = 2.dp,
-                    spacing = 0.7.dp
-                )
+                BirthdayGreeting(color = onBg)
             }
 
             // SCREEN TIME (only shown when permission is granted)
@@ -217,4 +200,34 @@ fun LauncherHomeScreen(
             )
         }
     }
+}
+
+/**
+ * Pulsing "HAPPY BIRTHDAY" greeting.
+ *
+ * The infinite transition lives here rather than in [LauncherHomeScreen] so it is only created
+ * on the user's birthday. Previously it was created unconditionally: an infiniteRepeatable never
+ * reaches a finished state, so it kept requesting a frame every frame for as long as the home
+ * page was composed — which, for a HOME app, is indefinitely. Nothing read the value on other
+ * days, so it was invisible; it just stopped the UI thread ever going idle.
+ */
+@Composable
+private fun BirthdayGreeting(color: androidx.compose.ui.graphics.Color) {
+    val transition = rememberInfiniteTransition(label = "birthday")
+    val alpha by transition.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "birthdayAlpha"
+    )
+
+    DotText(
+        text = "HAPPY BIRTHDAY",
+        color = color.copy(alpha = alpha),
+        dotSize = 2.dp,
+        spacing = 0.7.dp
+    )
 }

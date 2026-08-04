@@ -298,12 +298,20 @@ class LauncherViewModel @Inject constructor(
         viewModelScope.launch {
             appRepository.observeApps().collect { apps ->
                 _allApps.value = apps
-                // Seed default favorites on first load
-                seedDefaultsIfNeeded(apps)
-                // Scrub orphaned packages from custom folders
-                val validPackages = apps.map { it.packageName }.toSet()
-                if (validPackages.isNotEmpty()) {
-                    folderRepository.scrubPackages(validPackages)
+                // Seeding and scrubbing are unguarded DataStore writes, which throw IOException
+                // on a full disk or a corrupt store. This collector runs on every launch and on
+                // every package add/remove broadcast, so an uncaught throw here would crash the
+                // HOME app repeatedly. The app list itself is already published above, so a
+                // failure to seed or scrub degrades gracefully rather than taking down the
+                // launcher.
+                runCatching {
+                    // Seed default favorites on first load
+                    seedDefaultsIfNeeded(apps)
+                    // Scrub orphaned packages from custom folders
+                    val validPackages = apps.map { it.packageName }.toSet()
+                    if (validPackages.isNotEmpty()) {
+                        folderRepository.scrubPackages(validPackages)
+                    }
                 }
             }
         }
@@ -603,7 +611,15 @@ class LauncherViewModel @Inject constructor(
     }
 
     fun refreshWidgets() {
-        widgetManager.refresh()
+        // WidgetManager.refresh() makes three blocking binder calls — AppOpsManager, plus
+        // UsageStatsManager.queryUsageStats which marshals one UsageStats per installed package
+        // out of system_server, routinely tens to hundreds of ms. This is driven by a 60s
+        // LaunchedEffect loop that runs on the Compose main dispatcher, so leaving it inline
+        // dropped a frame on the home screen every minute. Every other heavy path here already
+        // moves off the main thread.
+        viewModelScope.launch(ioDispatcher) {
+            widgetManager.refresh()
+        }
     }
 
     // --- Backup & Restore ---
