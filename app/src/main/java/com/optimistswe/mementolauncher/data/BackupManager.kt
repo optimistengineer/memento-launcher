@@ -47,6 +47,15 @@ class BackupManager(
         prettyPrint = true
         ignoreUnknownKeys = true
         coerceInputValues = true
+        // Without this, `version` is omitted from every export: it always equals its default of 1
+        // and kotlinx.serialization drops defaults unless told otherwise. The field existed but
+        // was never actually written, so no future build could tell a v1 file from anything else.
+        encodeDefaults = true
+    }
+
+    companion object {
+        /** The schema version this build writes. */
+        const val CURRENT_VERSION = 1
     }
 
     suspend fun exportBackup(): String {
@@ -86,9 +95,108 @@ class BackupManager(
         return json.encodeToString(data)
     }
 
+    /**
+     * Restores a backup.
+     *
+     * Everything is decoded, version-checked and sanitised BEFORE the first write, so a malformed
+     * or hostile file fails without having touched any stored state. The four repositories sit on
+     * four separate DataStore files and cannot share a transaction, so a failure partway through
+     * the writes is still possible; prior state is captured up front and rolled back on failure to
+     * narrow that window as far as it can go without a real transaction.
+     *
+     * Restore also has to enforce the invariants the interactive paths enforce, because it is the
+     * one write path that accepts arbitrary values from outside the app.
+     *
+     * @throws IllegalArgumentException if the file is from a newer schema version.
+     */
     suspend fun importBackup(jsonString: String) {
-        val data = json.decodeFromString<BackupData>(jsonString)
+        val raw = json.decodeFromString<BackupData>(jsonString)
 
+        require(raw.version <= CURRENT_VERSION) {
+            "This backup was written by a newer version of Memento (v${raw.version}); " +
+                "this build understands up to v$CURRENT_VERSION."
+        }
+
+        val data = sanitize(raw)
+
+        // Snapshot for rollback. Captured before any write.
+        val priorPrefs = preferencesRepository.getUserPreferences().first()
+        val priorFavorites = favoritesRepository.getFavorites().first()
+        val priorDockLeft = favoritesRepository.getDockLeftApp().first()
+        val priorDockRight = favoritesRepository.getDockRightApp().first()
+        val priorLabels = appLabelRepository.getCustomLabels().first()
+        val priorFolders = folderRepository.folders.first()
+
+        try {
+            applyRestore(data)
+        } catch (failure: Throwable) {
+            runCatching {
+                preferencesRepository.restoreAll(
+                    birthDateEpochDays = priorPrefs.birthDate?.toEpochDay(),
+                    lifeExpectancy = priorPrefs.lifeExpectancy,
+                    wallpaperTarget = priorPrefs.wallpaperTarget.name,
+                    theme = priorPrefs.theme.name,
+                    dotStyle = priorPrefs.dotStyle.name,
+                    backgroundStyle = priorPrefs.backgroundStyle.name,
+                    fontSize = priorPrefs.fontSize.name,
+                    isSetupComplete = priorPrefs.isSetupComplete,
+                    autoOpenKeyboard = priorPrefs.autoOpenKeyboard,
+                    clockStyle = priorPrefs.clockStyle.name,
+                    searchBarPosition = priorPrefs.searchBarPosition.name,
+                    hiddenPackages = priorPrefs.hiddenPackages,
+                    distractingPackages = priorPrefs.distractingPackages,
+                    mindfulMessage = priorPrefs.mindfulMessage,
+                    blockShortFormContent = priorPrefs.blockShortFormContent,
+                    usageNudgeEnabled = priorPrefs.usageNudgeEnabled,
+                    usageNudgeMinutes = priorPrefs.usageNudgeMinutes,
+                    showLifeCalendar = priorPrefs.showLifeCalendar
+                )
+                favoritesRepository.restoreAll(priorFavorites, priorDockLeft, priorDockRight)
+                appLabelRepository.restoreAll(priorLabels)
+                folderRepository.restoreAll(priorFolders)
+            }
+            throw failure
+        }
+    }
+
+    /**
+     * Brings an arbitrary decoded backup in line with the invariants the interactive paths
+     * enforce. Restore is the only write path fed by a file the user could have hand-edited.
+     */
+    private fun sanitize(data: BackupData): BackupData {
+        val favorites = data.favorites
+            .filter { it.isNotBlank() }
+            .distinct()
+            .take(FavoritesRepository.MAX_FAVORITES)
+
+        val seenIds = mutableSetOf<String>()
+        val seenNames = mutableSetOf<String>()
+        val folders = data.folders.mapNotNull { folder ->
+            val name = folder.name.trim()
+            // Duplicate ids make every id-keyed operation act on all matching folders at once;
+            // duplicate names deadlock renaming, because the uniqueness guard silently no-ops.
+            if (name.isBlank()) return@mapNotNull null
+            if (!seenIds.add(folder.id)) return@mapNotNull null
+            if (!seenNames.add(name.lowercase())) return@mapNotNull null
+            folder.copy(name = name, packages = folder.packages.filter { it.isNotBlank() }.distinct())
+        }
+
+        return data.copy(
+            lifeExpectancy = data.lifeExpectancy.coerceIn(
+                com.optimistswe.mementolauncher.domain.LifeCalendarCalculator.MIN_LIFE_EXPECTANCY,
+                com.optimistswe.mementolauncher.domain.LifeCalendarCalculator.MAX_LIFE_EXPECTANCY
+            ),
+            usageNudgeMinutes = data.usageNudgeMinutes.coerceIn(1, 24 * 60),
+            favorites = favorites,
+            dockLeft = data.dockLeft?.takeIf { it.isNotBlank() },
+            dockRight = data.dockRight?.takeIf { it.isNotBlank() },
+            // A blank custom label renders the app with no name at all in the drawer.
+            customLabels = data.customLabels.filterValues { it.isNotBlank() },
+            folders = folders
+        )
+    }
+
+    private suspend fun applyRestore(data: BackupData) {
         preferencesRepository.restoreAll(
             birthDateEpochDays = data.birthDateEpochDays,
             lifeExpectancy = data.lifeExpectancy,
