@@ -6,6 +6,9 @@ import com.optimistswe.mementolauncher.data.*
 import com.optimistswe.mementolauncher.wallpaper.WallpaperTarget
 import com.optimistswe.mementolauncher.ui.managers.TimeManager
 import com.optimistswe.mementolauncher.ui.managers.WidgetManager
+import com.optimistswe.mementolauncher.ui.screens.AppDrawerItem
+import kotlinx.coroutines.flow.MutableStateFlow
+import java.time.LocalDate
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
@@ -455,6 +458,155 @@ class LauncherViewModelTest {
             val result = awaitItem()
             assertEquals(1, result.size)
             assertEquals("YouTube", result[0].label)
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    // Life metrics resilience
+    // ═══════════════════════════════════════════
+
+    private fun prefs(birthDate: LocalDate?, lifeExpectancy: Int = 80) = UserPreferences(
+        birthDate = birthDate,
+        lifeExpectancy = lifeExpectancy,
+        wallpaperTarget = WallpaperTarget.BOTH,
+        theme = CalendarTheme.DARK,
+        dotStyle = DotStyle.FILLED_CIRCLE,
+        backgroundStyle = BackgroundStyle.MATRIX_GRID,
+        fontSize = FontSize.MEDIUM,
+        isSetupComplete = true,
+        autoOpenKeyboard = true,
+        clockStyle = ClockStyle.H24,
+        searchBarPosition = SearchBarPosition.BOTTOM,
+        hiddenPackages = emptySet(),
+        distractingPackages = emptySet(),
+        mindfulMessage = "Breathe.",
+        blockShortFormContent = false,
+        usageNudgeEnabled = false,
+        usageNudgeMinutes = 15
+    )
+
+    @Test
+    fun `a stored future birth date does not kill the preferences collector`() {
+        // calculateMetrics rejects future birth dates. An unhandled throw in the preferences
+        // collector would tear that collector down and crash the launcher on start, which for a
+        // HOME app leaves the device without a usable home screen. A future date can be
+        // persisted via a hand-edited backup.
+        //
+        // Asserting "no metrics" alone would pass even when broken — the throw happens before
+        // anything is assigned. The real signal is that the collector is still alive afterwards,
+        // so this feeds a valid date next and requires it to be processed.
+        val prefsFlow = MutableStateFlow(prefs(birthDate = LocalDate.now().plusYears(1)))
+        every { preferencesRepository.getUserPreferences() } returns prefsFlow
+
+        createViewModel()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertNull("an invalid date must not produce metrics", viewModel.lifeMetrics.value)
+        assertEquals("", viewModel.lifeProgressText.value)
+
+        prefsFlow.value = prefs(birthDate = LocalDate.now().minusYears(30))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertNotNull(
+            "collector died on the invalid date and never saw the valid one",
+            viewModel.lifeMetrics.value
+        )
+    }
+
+    @Test
+    fun `a valid birth date produces life metrics`() {
+        every { preferencesRepository.getUserPreferences() } returns
+                flowOf(prefs(birthDate = LocalDate.now().minusYears(30)))
+
+        createViewModel()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val metrics = viewModel.lifeMetrics.value
+        assertNotNull(metrics)
+        assertEquals(80 * 52, metrics!!.totalWeeks)
+        assertTrue(viewModel.lifeProgressText.value.startsWith("WEEK "))
+    }
+
+    @Test
+    fun `life metrics are cleared when the birth date is removed`() {
+        // Restoring a backup with no birth date used to reset only the progress text, leaving
+        // the calendar rendering stale metrics from the previous user.
+        val prefsFlow = MutableStateFlow(prefs(birthDate = LocalDate.now().minusYears(30)))
+        every { preferencesRepository.getUserPreferences() } returns prefsFlow
+
+        createViewModel()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNotNull("precondition: metrics present", viewModel.lifeMetrics.value)
+
+        prefsFlow.value = prefs(birthDate = null)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertNull("stale metrics must not survive birth date removal", viewModel.lifeMetrics.value)
+        assertEquals("", viewModel.lifeProgressText.value)
+    }
+
+    // ═══════════════════════════════════════════
+    // Drawer grouping — folder search
+    // ═══════════════════════════════════════════
+
+    @Test
+    fun `search keeps folders matching by name or by contents and drops the rest`() = runTest {
+        val apps = listOf(
+            AppInfo("Calculator", "com.calc", "a"),
+            AppInfo("Zebra", "com.zebra", "z")
+        )
+        every { appRepository.observeApps() } returns flowOf(apps)
+        every { folderRepository.folders } returns flowOf(
+            listOf(
+                // Matches because it contains "Calculator".
+                AppFolder(id = "f1", name = "Utilities", packages = listOf("com.calc")),
+                // Matches on its own name.
+                AppFolder(id = "f2", name = "Calc Stuff", packages = emptyList()),
+                // Matches neither — previously still rendered during a search.
+                AppFolder(id = "f3", name = "Media", packages = listOf("com.zebra"))
+            )
+        )
+
+        createViewModel()
+        viewModel.updateSearchQuery("Calc")
+
+        viewModel.groupedDrawerItems.test {
+            var grouped = awaitItem()
+            while (grouped.isEmpty()) grouped = awaitItem()
+
+            val folderNames = grouped.values.flatten()
+                .filterIsInstance<AppDrawerItem.Folder>()
+                .map { it.folder.name }
+                .sorted()
+
+            assertEquals(listOf("Calc Stuff", "Utilities"), folderNames)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `a blank query keeps every folder including empty ones`() = runTest {
+        every { appRepository.observeApps() } returns flowOf(emptyList())
+        every { folderRepository.folders } returns flowOf(
+            listOf(
+                AppFolder(id = "f1", name = "Alpha", packages = emptyList()),
+                AppFolder(id = "f2", name = "Beta", packages = emptyList())
+            )
+        )
+
+        createViewModel()
+
+        viewModel.groupedDrawerItems.test {
+            var grouped = awaitItem()
+            while (grouped.isEmpty()) grouped = awaitItem()
+
+            val folderNames = grouped.values.flatten()
+                .filterIsInstance<AppDrawerItem.Folder>()
+                .map { it.folder.name }
+                .sorted()
+
+            assertEquals(listOf("Alpha", "Beta"), folderNames)
+            cancelAndIgnoreRemainingEvents()
         }
     }
 }

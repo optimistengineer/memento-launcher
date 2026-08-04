@@ -66,61 +66,6 @@ class CalendarImageGenerator {
     }
 
     /**
-     * Calculates the complete layout with proper centering.
-     *
-     * Algorithm:
-     * 1. Define safe zone (area where grid can be placed)
-     * 2. Calculate optimal cell size to fit in safe zone
-     * 3. Calculate actual grid dimensions
-     * 4. Center grid horizontally within screen
-     * 5. Position grid vertically in upper portion
-     */
-    private fun calculateLayout(lifeExpectancy: Int, config: CalendarConfig): Layout {
-        val columns = LifeCalendarCalculator.WEEKS_PER_YEAR
-        val rows = lifeExpectancy
-
-        // Calculate safe zone using percentages of screen dimensions
-        val topMargin = config.height * config.topMarginPercent
-        val bottomMargin = config.height * config.bottomMarginPercent
-        val margin = config.width * config.marginPercent
-
-        // Exact bounds to align dynamically with 24.dp outer padded Compose layouts
-        val contentLeft = margin
-        val contentRight = config.width - margin
-
-        // Available space for the grid (spanning full width between margins)
-        val availableWidth = contentRight - contentLeft
-        val availableHeight = config.height - topMargin - bottomMargin
-
-        // Calculate cell size exactly to fit available width
-        val exactCellWidth = (availableWidth - (columns - 1) * config.cellSpacing) / columns.toFloat()
-        val cellSize = exactCellWidth.coerceAtLeast(config.minCellSize)
-
-        // Calculate actual grid dimensions
-        val gridWidth = columns * cellSize + (columns - 1) * config.cellSpacing
-        val gridHeight = rows * cellSize + (rows - 1) * config.cellSpacing
-
-        // Center grid horizontally perfectly aligned with UI margins
-        val gridStartX = contentLeft
-
-        // Center grid vertically within safe zone
-        val verticalSpace = availableHeight - gridHeight
-        val gridStartY = topMargin + (verticalSpace / 2)
-
-        return Layout(
-            gridStartX = gridStartX,
-            gridStartY = gridStartY,
-            gridWidth = gridWidth,
-            gridHeight = gridHeight,
-            cellSize = cellSize,
-            columns = columns,
-            rows = rows,
-            contentLeft = contentLeft,
-            contentRight = contentRight
-        )
-    }
-
-    /**
      * Draws labels around the grid.
      *
      * Labels are positioned:
@@ -244,6 +189,13 @@ class CalendarImageGenerator {
     private fun measureDotText(text: String, dotSize: Float, spacing: Float): Float {
         var width = 0f
         text.forEach { char ->
+            if (char == ' ') {
+                // Must mirror drawDotText's advance for a space exactly. Measuring a space via
+                // getCharPattern instead overstates it by one `spacing`, which shifts every
+                // right-aligned and centred label by that much per space it contains.
+                width += (dotSize * 2) + spacing
+                return@forEach
+            }
             val pattern = getCharPattern(char)
             val cols = if (pattern.isNotEmpty()) pattern[0].length else 0
             val charWidth = (cols * dotSize) + ((cols - 1).coerceAtLeast(0) * spacing)
@@ -326,9 +278,73 @@ class CalendarImageGenerator {
 }
 
 /**
+ * Calculates the complete layout with proper centering.
+ *
+ * Algorithm:
+ * 1. Define safe zone (area where grid can be placed)
+ * 2. Calculate optimal cell size to fit in the safe zone on BOTH axes
+ * 3. Calculate actual grid dimensions
+ * 4. Center grid horizontally within the content band
+ * 5. Center grid vertically within the safe zone
+ *
+ * Kept as a top-level function rather than a method so the pure layout math stays free of the
+ * generator's Android drawing state (Paint/Path), which cannot be constructed in a JVM test.
+ */
+internal fun calculateLayout(lifeExpectancy: Int, config: CalendarConfig): Layout {
+    val columns = LifeCalendarCalculator.WEEKS_PER_YEAR
+    val rows = lifeExpectancy.coerceAtLeast(1)
+
+    // Calculate safe zone using percentages of screen dimensions
+    val topMargin = config.height * config.topMarginPercent
+    val bottomMargin = config.height * config.bottomMarginPercent
+    val margin = config.width * config.marginPercent
+
+    // Exact bounds to align dynamically with 24.dp outer padded Compose layouts
+    val contentLeft = margin
+    val contentRight = config.width - margin
+
+    // Available space for the grid (spanning full width between margins)
+    val availableWidth = contentRight - contentLeft
+    val availableHeight = config.height - topMargin - bottomMargin
+
+    // Cell size must satisfy BOTH axes. Sizing on width alone overflows the safe zone once
+    // there are enough rows: at the maximum life expectancy of 120 the grid grows past the
+    // top and bottom margins that are reserved for lock screen UI (clock, controls).
+    // For the common 80-year grid width is still the binding constraint, so layout is
+    // unchanged there.
+    val exactCellWidth = (availableWidth - (columns - 1) * config.cellSpacing) / columns.toFloat()
+    val exactCellHeight = (availableHeight - (rows - 1) * config.cellSpacing) / rows.toFloat()
+    val cellSize = minOf(exactCellWidth, exactCellHeight).coerceAtLeast(config.minCellSize)
+
+    // Calculate actual grid dimensions
+    val gridWidth = columns * cellSize + (columns - 1) * config.cellSpacing
+    val gridHeight = rows * cellSize + (rows - 1) * config.cellSpacing
+
+    // Center the grid in the content band. When width is the binding constraint the grid
+    // spans it exactly and this resolves to contentLeft, matching the previous behaviour.
+    val gridStartX = contentLeft + (availableWidth - gridWidth) / 2f
+
+    // Center grid vertically within safe zone
+    val verticalSpace = availableHeight - gridHeight
+    val gridStartY = topMargin + (verticalSpace / 2)
+
+    return Layout(
+        gridStartX = gridStartX,
+        gridStartY = gridStartY,
+        gridWidth = gridWidth,
+        gridHeight = gridHeight,
+        cellSize = cellSize,
+        columns = columns,
+        rows = rows,
+        contentLeft = contentLeft,
+        contentRight = contentRight
+    )
+}
+
+/**
  * Layout parameters calculated by the generator.
  */
-private data class Layout(
+internal data class Layout(
     val gridStartX: Float,
     val gridStartY: Float,
     val gridWidth: Float,

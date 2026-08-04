@@ -215,7 +215,13 @@ class MainViewModel @Inject constructor(
         generateJob = viewModelScope.launch {
             try {
                 val birthDate = prefs.birthDate ?: return@launch
-                val metrics = calculator.calculateMetrics(birthDate, prefs.lifeExpectancy)
+                // A stored birth date can be in the future (e.g. restored from a hand-edited
+                // backup), which calculateMetrics rejects. The surrounding try/finally only
+                // resets isLoading — it does not catch — so an throw here would propagate out
+                // of the coroutine and crash the app. Skip generation instead.
+                val metrics = runCatching {
+                    calculator.calculateMetrics(birthDate, prefs.lifeExpectancy)
+                }.getOrNull() ?: return@launch
                 _metrics.value = metrics
 
                 val config = createConfig(prefs.theme, prefs.dotStyle)

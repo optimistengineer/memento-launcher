@@ -70,14 +70,22 @@ fun DottedDatePickerDialog(
     onDateSelected: (LocalDate) -> Unit,
     onDismiss: () -> Unit
 ) {
+    // A birth date can never be in the future. Everything below is clamped to today:
+    // downstream, LifeCalendarCalculator.calculateMetrics rejects future birth dates, and an
+    // unhandled throw there would crash the launcher on every start.
+    val today = remember { LocalDate.now() }
+    val currentMonth = remember { YearMonth.from(today) }
+
     var displayedMonth by remember {
-        mutableStateOf(YearMonth.from(initialDate ?: LocalDate.now()))
+        mutableStateOf(minOf(YearMonth.from(initialDate ?: today), currentMonth))
     }
     var selectedDate by remember {
-        mutableStateOf(initialDate ?: LocalDate.now())
+        mutableStateOf(minOf(initialDate ?: today, today))
     }
     var showYearPicker by remember { mutableStateOf(false) }
     var showMonthPicker by remember { mutableStateOf(false) }
+
+    val canGoToNextMonth = displayedMonth < currentMonth
 
     val dateFormatter = remember { DateTimeFormatter.ofPattern("d MMM yyyy") }
 
@@ -121,7 +129,9 @@ fun DottedDatePickerDialog(
                     YearPicker(
                         currentYear = displayedMonth.year,
                         onYearSelected = { year ->
-                            displayedMonth = displayedMonth.withYear(year)
+                            // Clamp: e.g. viewing December then jumping to the current year
+                            // would otherwise land on a month that has not happened yet.
+                            displayedMonth = minOf(displayedMonth.withYear(year), currentMonth)
                             showYearPicker = false
                         },
                         onDismiss = { showYearPicker = false }
@@ -131,7 +141,7 @@ fun DottedDatePickerDialog(
                     MonthPicker(
                         currentMonth = displayedMonth.monthValue,
                         onMonthSelected = { month ->
-                            displayedMonth = displayedMonth.withMonth(month)
+                            displayedMonth = minOf(displayedMonth.withMonth(month), currentMonth)
                             showMonthPicker = false
                         },
                         onDismiss = { showMonthPicker = false }
@@ -172,13 +182,14 @@ fun DottedDatePickerDialog(
                             )
                         }
 
-                        IconButton(onClick = {
-                            displayedMonth = displayedMonth.plusMonths(1)
-                        }) {
+                        IconButton(
+                            onClick = { displayedMonth = displayedMonth.plusMonths(1) },
+                            enabled = canGoToNextMonth
+                        ) {
                             Icon(
                                 Icons.AutoMirrored.Filled.KeyboardArrowRight,
                                 contentDescription = "Next month",
-                                tint = Color.White,
+                                tint = if (canGoToNextMonth) Color.White else Color.DarkGray,
                                 modifier = Modifier.size(32.dp)
                             )
                         }
@@ -211,6 +222,7 @@ fun DottedDatePickerDialog(
                     CalendarGrid(
                         yearMonth = displayedMonth,
                         selectedDate = selectedDate,
+                        maxDate = today,
                         onDateClick = { date -> selectedDate = date }
                     )
                 }
@@ -376,11 +388,15 @@ private fun MonthPicker(
 /**
  * Calendar grid displaying days of the month.
  * Always shows 6 weeks for consistent layout.
+ *
+ * @param maxDate The latest selectable date. Days after it are dimmed and inert, since a
+ *                birth date in the future is not a valid input.
  */
 @Composable
 private fun CalendarGrid(
     yearMonth: YearMonth,
     selectedDate: LocalDate,
+    maxDate: LocalDate,
     onDateClick: (LocalDate) -> Unit
 ) {
     val daysInMonth = yearMonth.lengthOfMonth()
@@ -410,19 +426,24 @@ private fun CalendarGrid(
                             val currentDay = dayOffset + 1
                             val date = yearMonth.atDay(currentDay)
                             val isSelected = date == selectedDate
+                            val isFuture = date.isAfter(maxDate)
 
                             Box(
                                 modifier = Modifier
                                     .size(48.dp)  // Larger circles
                                     .clip(CircleShape)
                                     .background(if (isSelected) Color.White else Color.Transparent)
-                                    .clickable { onDateClick(date) },
+                                    .clickable(enabled = !isFuture) { onDateClick(date) },
                                 contentAlignment = Alignment.Center
                             ) {
                                 DottedText(
                                     text = currentDay.toString(),
                                     fontSize = 20,  // Larger font
-                                    color = if (isSelected) Color.Black else Color.White
+                                    color = when {
+                                        isSelected -> Color.Black
+                                        isFuture -> Color.DarkGray
+                                        else -> Color.White
+                                    }
                                 )
                             }
                         }

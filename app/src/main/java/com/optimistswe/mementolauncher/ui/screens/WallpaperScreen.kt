@@ -23,7 +23,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
@@ -246,7 +245,10 @@ private fun LifeCalendarGrid(
     val columns = 52
     val rows = metrics.lifeExpectancy
     val weeksLived = metrics.weeksLived
-    val currentWeekIndex = (weeksLived - 1).coerceAtLeast(0)
+    // -1 means "no cell to highlight": either nothing lived yet, or the user has outlived their
+    // life expectancy, in which case the index falls past the last row and the marker would be
+    // drawn outside the grid.
+    val currentWeekIndex = if (weeksLived in 1..(rows * columns)) weeksLived - 1 else -1
 
     // Pulsing animation for the current week's dot
     val pulseTransition = rememberInfiniteTransition(label = "currentWeekPulse")
@@ -268,15 +270,6 @@ private fun LifeCalendarGrid(
         ),
         label = "pulseAlpha"
     )
-
-    // Cache the static grid into an ImageBitmap so we don't redraw 4160 circles every frame.
-    // Only the pulsing current-week dot needs per-frame drawing.
-    val density = LocalDensity.current
-    val cachedGrid = remember(metrics, filledColor, emptyColor, rowSpacing) {
-        // We can't know the exact size yet, so we'll draw in the Canvas below.
-        // Instead, cache the grid parameters to avoid recomputation.
-        metrics // trigger recompute when metrics change
-    }
 
     Canvas(modifier = modifier) {
         val availableWidth = size.width
@@ -304,17 +297,19 @@ private fun LifeCalendarGrid(
         }
 
         // Draw pulsing current week dot (only element that changes per frame)
-        val currentRow = currentWeekIndex / columns
-        val currentCol = currentWeekIndex % columns
-        val cx = currentCol * (cellSize + colSpacing) + cellSize / 2f
-        val cy = currentRow * (cellSize + rowSpacing) + cellSize / 2f
-        val currentWeekColor = Color(0xFF228B22)
-        drawCircle(color = currentWeekColor, radius = radius, center = Offset(cx, cy))
-        drawCircle(
-            color = currentWeekColor.copy(alpha = pulseAlpha),
-            radius = radius * pulseScale,
-            center = Offset(cx, cy),
-            style = Stroke(width = 1.5f)
-        )
+        if (currentWeekIndex >= 0) {
+            val currentRow = currentWeekIndex / columns
+            val currentCol = currentWeekIndex % columns
+            val cx = currentCol * (cellSize + colSpacing) + cellSize / 2f
+            val cy = currentRow * (cellSize + rowSpacing) + cellSize / 2f
+            val currentWeekColor = Color(0xFF228B22)
+            drawCircle(color = currentWeekColor, radius = radius, center = Offset(cx, cy))
+            drawCircle(
+                color = currentWeekColor.copy(alpha = pulseAlpha),
+                radius = radius * pulseScale,
+                center = Offset(cx, cy),
+                style = Stroke(width = 1.5f)
+            )
+        }
     }
 }

@@ -186,12 +186,21 @@ class LauncherViewModel @Inject constructor(
         val assignedPackages = folders.flatMap { it.packages }.toSet()
         val unassignedApps = apps.filterNot { assignedPackages.contains(it.packageName) }
 
+        // Folders were previously emitted unconditionally, so every folder stayed on screen
+        // during a search even when neither it nor anything inside it matched.
+        val folderItems = folders.mapNotNull { folder ->
+            val resolvedApps = folder.packages.mapNotNull { pkg -> apps.find { it.packageName == pkg } }
+                .sortedBy { it.label.lowercase() }
+            val matchesQuery = query.isBlank() ||
+                    folder.name.contains(query, ignoreCase = true) ||
+                    resolvedApps.isNotEmpty()
+            if (matchesQuery) {
+                com.optimistswe.mementolauncher.ui.screens.AppDrawerItem.Folder(folder, resolvedApps)
+            } else null
+        }
+
         val allItems = unassignedApps.map { com.optimistswe.mementolauncher.ui.screens.AppDrawerItem.App(it) } +
-                       folders.map { folder ->
-                           val resolvedApps = folder.packages.mapNotNull { pkg -> apps.find { it.packageName == pkg } }
-                               .sortedBy { it.label.lowercase() }
-                           com.optimistswe.mementolauncher.ui.screens.AppDrawerItem.Folder(folder, resolvedApps)
-                       }
+                       folderItems
 
         val grouped = allItems.groupBy { item ->
             val first = item.displayName.firstOrNull()?.uppercaseChar() ?: '#'
@@ -265,15 +274,22 @@ class LauncherViewModel @Inject constructor(
                 // Update clock style
                 timeManager.updateClockStyle(prefs.clockStyle)
 
-                // Update life metrics
-                val birthDate = prefs.birthDate
-                if (birthDate != null) {
-                    val metrics = calculator.calculateMetrics(birthDate, prefs.lifeExpectancy)
-                    _lifeMetrics.value = metrics
-                    _lifeProgressText.value = "WEEK ${metrics.weeksLived} OF ${metrics.totalWeeks}"
-                } else {
-                    _lifeProgressText.value = ""
+                // Update life metrics.
+                //
+                // calculateMetrics rejects a birth date in the future. A stored date can still be
+                // invalid — e.g. restored from a hand-edited backup — and letting that throw here
+                // would kill this collector and crash the launcher on every start, which for a HOME
+                // app means an unusable device. Degrade to "no metrics" instead.
+                //
+                // Assigning _lifeMetrics unconditionally also clears stale metrics when the birth
+                // date is removed; previously only the progress text was reset.
+                val metrics = prefs.birthDate?.let { birthDate ->
+                    runCatching { calculator.calculateMetrics(birthDate, prefs.lifeExpectancy) }
+                        .getOrNull()
                 }
+                _lifeMetrics.value = metrics
+                _lifeProgressText.value =
+                    metrics?.let { "WEEK ${it.weeksLived} OF ${it.totalWeeks}" } ?: ""
             }
         }
     }
