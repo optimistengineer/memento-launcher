@@ -13,5 +13,7 @@ import kotlinx.serialization.Serializable
 data class AppFolder(
     val id: String = java.util.UUID.randomUUID().toString(),
     val name: String,
-    val packages: List<String>
+    // Defaulted so a `"packages": null` in a hand-edited backup coerces to empty
+    // instead of failing the whole decode.
+    val packages: List<String> = emptyList()
 )

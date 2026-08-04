@@ -82,6 +82,16 @@ android {
     buildFeatures {
         compose = true
     }
+
+    testOptions {
+        unitTests {
+            // Android framework stubs throw "not mocked" by default, so any production code path
+            // that touches android.util.Log is untestable on the JVM. Returning defaults makes
+            // logging a no-op in tests instead, which is what lets the error-handling branches
+            // (unreadable stored JSON, and so on) be covered at all.
+            isReturnDefaultValues = true
+        }
+    }
 }
 
 dependencies {

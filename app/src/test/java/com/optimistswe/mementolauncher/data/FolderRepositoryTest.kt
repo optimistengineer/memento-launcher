@@ -3,6 +3,8 @@ package com.optimistswe.mementolauncher.data
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
@@ -234,6 +236,62 @@ class FolderRepositoryTest {
         repository.addAppToFolder("nonexistent", "com.fb")
 
         val folders = repository.folders.first()
+        assertTrue(folders[0].packages.isEmpty())
+    }
+
+    // ═══════════════════════════════════════════
+    // Unreadable / partially bad stored JSON
+    // ═══════════════════════════════════════════
+
+    private suspend fun writeRawFolders(raw: String) {
+        dataStore.edit { it[stringPreferencesKey("app_folders")] = raw }
+    }
+
+    @Test
+    fun `a mutation does not destroy folders when the stored json is unreadable`() = runTest(testDispatcher) {
+        // Every mutator writes the decoded list straight back. Decoding unreadable JSON to an
+        // empty list therefore meant the first folder interaction permanently destroyed data
+        // that was still intact on disk.
+        writeRawFolders("this is not json at all")
+
+        repository.createFolder("NEW")
+
+        val stored = dataStore.data.first()[stringPreferencesKey("app_folders")]
+        assertEquals("the unreadable blob must be left untouched", "this is not json at all", stored)
+    }
+
+    @Test
+    fun `delete does not destroy folders when the stored json is unreadable`() = runTest(testDispatcher) {
+        writeRawFolders("{{{ broken")
+
+        repository.deleteFolder("whatever")
+
+        assertEquals("{{{ broken", dataStore.data.first()[stringPreferencesKey("app_folders")])
+    }
+
+    @Test
+    fun `one malformed entry does not take the other folders down with it`() = runTest(testDispatcher) {
+        // Previously a single bad element failed the whole array decode, so every folder vanished.
+        writeRawFolders(
+            """[{"id":"a","name":"GOOD","packages":["com.a"]},""" +
+            """{"id":"b","name":12345,"packages":["com.b"]},""" +
+            """{"id":"c","name":"ALSO GOOD","packages":["com.c"]}]"""
+        )
+
+        val folders = repository.folders.first()
+
+        assertEquals(2, folders.size)
+        assertEquals(listOf("ALSO GOOD", "GOOD"), folders.map { it.name }.sorted())
+    }
+
+    @Test
+    fun `a null packages array coerces to empty instead of failing the decode`() = runTest(testDispatcher) {
+        writeRawFolders("""[{"id":"a","name":"NULLPKGS","packages":null}]""")
+
+        val folders = repository.folders.first()
+
+        assertEquals(1, folders.size)
+        assertEquals("NULLPKGS", folders[0].name)
         assertTrue(folders[0].packages.isEmpty())
     }
 }

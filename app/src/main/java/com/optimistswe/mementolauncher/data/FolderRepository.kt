@@ -10,7 +10,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.decodeFromJsonElement
 
 /**
  * Repository for managing user-defined folders in the app drawer.
@@ -61,7 +63,8 @@ class FolderRepository(private val dataStore: DataStore<Preferences>) {
     suspend fun createFolder(name: String) {
         dataStore.edit { preferences ->
             val jsonString = preferences[PreferencesKeys.FOLDERS] ?: "[]"
-            val currentFolders = parseFoldersJson(jsonString).toMutableList()
+            // Refuse to write over data we could not read — that would destroy it.
+            val currentFolders = (parseFoldersOrNull(jsonString) ?: return@edit).toMutableList()
             
             val trimmedName = name.trim()
             if (trimmedName.isBlank() || currentFolders.any { it.name.equals(trimmedName, ignoreCase = true) }) {
@@ -86,7 +89,8 @@ class FolderRepository(private val dataStore: DataStore<Preferences>) {
     suspend fun deleteFolder(folderId: String) {
         dataStore.edit { preferences ->
             val jsonString = preferences[PreferencesKeys.FOLDERS] ?: "[]"
-            val currentFolders = parseFoldersJson(jsonString).filterNot { it.id == folderId }
+            val currentFolders =
+                (parseFoldersOrNull(jsonString) ?: return@edit).filterNot { it.id == folderId }
             preferences[PreferencesKeys.FOLDERS] = serializeFoldersJson(currentFolders)
         }
     }
@@ -102,7 +106,7 @@ class FolderRepository(private val dataStore: DataStore<Preferences>) {
     suspend fun renameFolder(folderId: String, newName: String) {
         dataStore.edit { preferences ->
             val jsonString = preferences[PreferencesKeys.FOLDERS] ?: "[]"
-            val currentFolders = parseFoldersJson(jsonString)
+            val currentFolders = parseFoldersOrNull(jsonString) ?: return@edit
             
             val trimmedName = newName.trim()
             if (trimmedName.isBlank() || currentFolders.any { it.name.equals(trimmedName, ignoreCase = true) && it.id != folderId }) {
@@ -127,7 +131,7 @@ class FolderRepository(private val dataStore: DataStore<Preferences>) {
     suspend fun addAppToFolder(folderId: String, packageName: String) {
         dataStore.edit { preferences ->
             val jsonString = preferences[PreferencesKeys.FOLDERS] ?: "[]"
-            val currentFolders = parseFoldersJson(jsonString).map { folder ->
+            val currentFolders = (parseFoldersOrNull(jsonString) ?: return@edit).map { folder ->
                 if (folder.id == folderId && !folder.packages.contains(packageName)) {
                     folder.copy(packages = folder.packages + packageName)
                 } else {
@@ -147,7 +151,7 @@ class FolderRepository(private val dataStore: DataStore<Preferences>) {
     suspend fun removeAppFromFolder(folderId: String, packageName: String) {
         dataStore.edit { preferences ->
             val jsonString = preferences[PreferencesKeys.FOLDERS] ?: "[]"
-            val currentFolders = parseFoldersJson(jsonString).map { folder ->
+            val currentFolders = (parseFoldersOrNull(jsonString) ?: return@edit).map { folder ->
                 if (folder.id == folderId) {
                     folder.copy(packages = folder.packages.filterNot { it == packageName })
                 } else {
@@ -174,8 +178,8 @@ class FolderRepository(private val dataStore: DataStore<Preferences>) {
     suspend fun scrubPackages(validPackages: Set<String>) {
         dataStore.edit { preferences ->
             val jsonString = preferences[PreferencesKeys.FOLDERS] ?: "[]"
-            val currentFolders = parseFoldersJson(jsonString)
-            
+            val currentFolders = parseFoldersOrNull(jsonString) ?: return@edit
+
             var changed = false
             val scrubbedFolders = currentFolders.map { folder ->
                 val valid = folder.packages.filter { validPackages.contains(it) }
@@ -194,14 +198,42 @@ class FolderRepository(private val dataStore: DataStore<Preferences>) {
 
     // --- JSON Helpers ---
 
-    private fun parseFoldersJson(jsonString: String): List<AppFolder> {
+    /**
+     * Decodes the stored folder blob, or returns null if it cannot be read at all.
+     *
+     * Null and empty mean different things and must not be conflated. Every mutator writes the
+     * decoded list straight back, so returning an empty list for unreadable JSON meant the first
+     * folder interaction after any decode failure silently and permanently destroyed folders that
+     * were still intact on disk. Callers now refuse to write when this returns null.
+     *
+     * A single malformed entry no longer takes the rest down with it: the blob is decoded as an
+     * array first, then element by element, so bad entries are dropped individually.
+     */
+    private fun parseFoldersOrNull(jsonString: String): List<AppFolder>? {
         return try {
-            json.decodeFromString(jsonString)
-        } catch (e: Exception) {
-            android.util.Log.e("FolderRepository", "Failed to parse folders JSON", e)
-            emptyList()
+            json.decodeFromString<List<AppFolder>>(jsonString)
+        } catch (wholeListFailed: Exception) {
+            try {
+                val elements = json.parseToJsonElement(jsonString).jsonArray
+                val recovered = elements.mapNotNull { element ->
+                    runCatching { json.decodeFromJsonElement<AppFolder>(element) }.getOrNull()
+                }
+                android.util.Log.w(
+                    "FolderRepository",
+                    "Recovered ${recovered.size} of ${elements.size} folders after a decode failure",
+                    wholeListFailed
+                )
+                recovered
+            } catch (notEvenAnArray: Exception) {
+                android.util.Log.e("FolderRepository", "Folder JSON is unreadable", notEvenAnArray)
+                null
+            }
         }
     }
+
+    /** Read-only view for the [folders] flow, where an unreadable blob simply shows as empty. */
+    private fun parseFoldersJson(jsonString: String): List<AppFolder> =
+        parseFoldersOrNull(jsonString) ?: emptyList()
 
     private fun serializeFoldersJson(folders: List<AppFolder>): String {
         return json.encodeToString(folders)
