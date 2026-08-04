@@ -106,14 +106,32 @@ fun LauncherRootScreen(
         }
     }
 
-    // 3-page pager: 0 = Life Calendar, 1 = Home, 2 = App Drawer
-    // Starts on Page 1 (Home) so swiping left reveals the calendar, right reveals the drawer.
-    val pagerState = rememberPagerState(initialPage = 1, pageCount = { 3 })
+    // The life calendar page is optional (see UserPreferences.showLifeCalendar), so page
+    // indices are derived rather than hardcoded:
+    //   with calendar:    0 = Life Calendar, 1 = Home, 2 = App Drawer
+    //   without calendar:              0 = Home, 1 = App Drawer
+    //
+    // Gate on preferences having loaded before building the pager. rememberPagerState captures
+    // initialPage on first composition only, so composing it against the null-preferences
+    // default and then flipping pageCount would silently land the user on the wrong page.
+    val loadedPreferences = preferences ?: run {
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black))
+        return
+    }
+    val showCalendar = loadedPreferences.showLifeCalendar
+    val calendarPage = 0
+    val homePage = if (showCalendar) 1 else 0
+    val drawerPage = homePage + 1
+
+    val pagerState = rememberPagerState(
+        initialPage = homePage,
+        pageCount = { if (showCalendar) 3 else 2 }
+    )
 
     // Ensures that search is cleared whenever the user navigates away from the app drawer.
     LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.currentPage }.collect { page ->
-            if (page != 2) {
+            if (page != drawerPage) {
                 viewModel.clearSearch()
             }
         }
@@ -201,8 +219,8 @@ fun LauncherRootScreen(
                 // Only show the matrix grid background on Home (page 1) and App Drawer (page 2).
                 // The calendar page (page 0) is pure content — dots on black — so the grid
                 // background would visually conflict with the life calendar grid itself.
-                if (preferences?.backgroundStyle == BackgroundStyle.MATRIX_GRID
-                    && pagerState.currentPage != 0) {
+                if (loadedPreferences.backgroundStyle == BackgroundStyle.MATRIX_GRID
+                    && !(showCalendar && pagerState.currentPage == calendarPage)) {
                     MatrixGridBackground()
                 }
 
@@ -216,8 +234,8 @@ fun LauncherRootScreen(
                         }
                         keyboardController?.hide()
                         focusManager.clearFocus()
-                        if (pagerState.currentPage != 1) {
-                            pagerState.scrollToPage(1)
+                        if (pagerState.currentPage != homePage) {
+                            pagerState.scrollToPage(homePage)
                         }
                     }
                 }
@@ -229,11 +247,11 @@ fun LauncherRootScreen(
                 BackHandler(enabled = true) {
                     when {
                         showSettingsDialog -> showSettingsDialog = false
-                        pagerState.currentPage != 1 -> {
+                        pagerState.currentPage != homePage -> {
                             keyboardController?.hide()
                             focusManager.clearFocus()
                             coroutineScope.launch {
-                                pagerState.animateScrollToPage(1)
+                                pagerState.animateScrollToPage(homePage)
                             }
                         }
                         // Already on the home page — this IS the home screen, so do nothing.
@@ -246,12 +264,12 @@ fun LauncherRootScreen(
                     beyondViewportPageCount = 1,
                     userScrollEnabled = !showSettingsDialog
                 ) { page ->
-                    when (page) {
-                        0 -> {
+                    when {
+                        showCalendar && page == calendarPage -> {
                             WallpaperScreen(
                                 metrics = lifeMetrics,
                                 lifeProgressText = lifeProgress,
-                                isActive = pagerState.currentPage == 0,
+                                isActive = pagerState.currentPage == calendarPage,
                                 onOpenSettings = {
                                     keyboardController?.hide()
                                     focusManager.clearFocus()
@@ -259,7 +277,7 @@ fun LauncherRootScreen(
                                 }
                             )
                         }
-                        1 -> {
+                        page == homePage -> {
                             LauncherHomeScreen(
                                 currentTime = currentTime,
                                 currentDate = currentDate,
@@ -270,10 +288,11 @@ fun LauncherRootScreen(
                                 screenTime = screenTime,
                                 hasUsagePermission = viewModel.hasUsagePermission(),
                                 isBirthday = isBirthdayState,
+                                showCalendar = showCalendar,
                                 onLaunchApp = { pkg -> viewModel.requestAppLaunch(pkg, onLaunchApp) },
                                 onRemoveFavorite = { viewModel.toggleFavorite(it) },
                                 onOpenSearch = {
-                                    coroutineScope.launch { pagerState.animateScrollToPage(2) }
+                                    coroutineScope.launch { pagerState.animateScrollToPage(drawerPage) }
                                 },
                                 onExpandNotifications = {
                                     try {
@@ -288,7 +307,7 @@ fun LauncherRootScreen(
                                 }
                             )
                         }
-                        2 -> {
+                        page == drawerPage -> {
                             val searchBarPosition = preferences?.searchBarPosition ?: SearchBarPosition.TOP
 
                             AppDrawerScreen(
@@ -312,7 +331,7 @@ fun LauncherRootScreen(
                                     focusManager.clearFocus()
                                     showSettingsDialog = true
                                 },
-                                isVisible = pagerState.currentPage == 2,
+                                isVisible = pagerState.currentPage == drawerPage,
                                 autoOpenKeyboard = preferences?.autoOpenKeyboard == true
                             )
                         }
@@ -323,6 +342,8 @@ fun LauncherRootScreen(
                     LauncherSettingsPanel(
                         birthDate = preferences?.birthDate,
                         lifeExpectancy = preferences?.lifeExpectancy ?: 80,
+                        showLifeCalendar = showCalendar,
+                        onShowLifeCalendarChange = { viewModel.updateShowLifeCalendar(it) },
                         onBirthDateChange = { viewModel.updateBirthDate(it) },
                         onLifeExpectancyChange = { viewModel.updateLifeExpectancy(it) },
                         backgroundStyle = preferences?.backgroundStyle ?: BackgroundStyle.SOLID_BLACK,

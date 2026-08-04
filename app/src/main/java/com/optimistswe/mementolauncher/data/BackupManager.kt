@@ -26,6 +26,7 @@ data class BackupData(
     val blockShortFormContent: Boolean = false,
     val usageNudgeEnabled: Boolean = false,
     val usageNudgeMinutes: Int = 15,
+    val showLifeCalendar: Boolean = true,
     // Favorites
     val favorites: List<String> = emptyList(),
     val dockLeft: String? = null,
@@ -74,6 +75,7 @@ class BackupManager(
             blockShortFormContent = prefs.blockShortFormContent,
             usageNudgeEnabled = prefs.usageNudgeEnabled,
             usageNudgeMinutes = prefs.usageNudgeMinutes,
+            showLifeCalendar = prefs.showLifeCalendar,
             favorites = favorites,
             dockLeft = dockLeft,
             dockRight = dockRight,
@@ -104,7 +106,8 @@ class BackupManager(
             mindfulMessage = data.mindfulMessage,
             blockShortFormContent = data.blockShortFormContent,
             usageNudgeEnabled = data.usageNudgeEnabled,
-            usageNudgeMinutes = data.usageNudgeMinutes
+            usageNudgeMinutes = data.usageNudgeMinutes,
+            showLifeCalendar = data.showLifeCalendar
         )
 
         favoritesRepository.restoreAll(

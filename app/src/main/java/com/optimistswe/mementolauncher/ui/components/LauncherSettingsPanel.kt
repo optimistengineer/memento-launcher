@@ -43,6 +43,8 @@ import java.time.LocalDate
 fun LauncherSettingsPanel(
     birthDate: LocalDate?,
     lifeExpectancy: Int,
+    showLifeCalendar: Boolean = true,
+    onShowLifeCalendarChange: (Boolean) -> Unit = {},
     onBirthDateChange: (LocalDate) -> Unit,
     onLifeExpectancyChange: (Int) -> Unit,
     backgroundStyle: BackgroundStyle,
@@ -90,6 +92,7 @@ fun LauncherSettingsPanel(
     // ═══════════════════════════════════════════
     var bufferedBirthDate by remember { mutableStateOf(birthDate) }
     var bufferedLifeExpectancy by remember { mutableIntStateOf(lifeExpectancy) }
+    var bufferedShowLifeCalendar by remember { mutableStateOf(showLifeCalendar) }
     var bufferedBackgroundStyle by remember { mutableStateOf(backgroundStyle) }
     var bufferedFontSize by remember { mutableStateOf(fontSize) }
     var bufferedAutoOpenKeyboard by remember { mutableStateOf(autoOpenKeyboard) }
@@ -175,6 +178,8 @@ fun LauncherSettingsPanel(
                         initialExpanded = initiallyUnconfigured,
                         onBirthDateChange = { bufferedBirthDate = it },
                         onLifeExpectancyChange = { bufferedLifeExpectancy = it },
+                        showLifeCalendar = bufferedShowLifeCalendar,
+                        onShowLifeCalendarChange = { bufferedShowLifeCalendar = it },
                         onBg = onBg, bg = bg, dimmed = dimmed, faint = faint, cardBg = cardBg
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -334,6 +339,9 @@ fun LauncherSettingsPanel(
                         // Apply all buffered changes
                         bufferedBirthDate?.let { onBirthDateChange(it) }
                         onLifeExpectancyChange(bufferedLifeExpectancy)
+                        if (bufferedShowLifeCalendar != showLifeCalendar) {
+                            onShowLifeCalendarChange(bufferedShowLifeCalendar)
+                        }
                         onBackgroundStyleChange(bufferedBackgroundStyle)
                         onFontSizeChange(bufferedFontSize)
                         onAutoOpenKeyboardChange(bufferedAutoOpenKeyboard)

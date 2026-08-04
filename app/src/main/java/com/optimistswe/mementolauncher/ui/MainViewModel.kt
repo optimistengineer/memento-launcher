@@ -105,14 +105,15 @@ class MainViewModel @Inject constructor(
      * @param birthDate User's birth date
      * @param lifeExpectancy Expected lifespan in years
      */
-    fun completeOnboarding(birthDate: LocalDate?, lifeExpectancy: Int) {
+    fun completeOnboarding(birthDate: LocalDate?, lifeExpectancy: Int, showLifeCalendar: Boolean = true) {
         viewModelScope.launch {
             preferencesRepository.saveAllPreferences(
                 birthDate = birthDate,
                 lifeExpectancy = lifeExpectancy,
                 wallpaperTarget = WallpaperTarget.LOCK, // Default to Lock Screen
                 theme = CalendarTheme.DARK,
-                dotStyle = com.optimistswe.mementolauncher.data.DotStyle.FILLED_CIRCLE
+                dotStyle = com.optimistswe.mementolauncher.data.DotStyle.FILLED_CIRCLE,
+                showLifeCalendar = showLifeCalendar
             )
             scheduleWorker()
         }

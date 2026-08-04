@@ -598,6 +598,13 @@ class LauncherViewModel @Inject constructor(
         }
     }
 
+    /** Shows or hides the life calendar page. */
+    fun updateShowLifeCalendar(show: Boolean) {
+        viewModelScope.launch {
+            preferencesRepository.saveShowLifeCalendar(show)
+        }
+    }
+
     fun updateUsageNudgeEnabled(enabled: Boolean) {
         viewModelScope.launch {
             preferencesRepository.saveUsageNudgeEnabled(enabled)

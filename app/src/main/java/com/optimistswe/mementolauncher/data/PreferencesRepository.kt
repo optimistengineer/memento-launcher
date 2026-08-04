@@ -46,6 +46,7 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
         val BLOCK_SHORT_FORM_CONTENT = booleanPreferencesKey("block_short_form")
         val USAGE_NUDGE_ENABLED = booleanPreferencesKey("usage_nudge_enabled")
         val USAGE_NUDGE_MINUTES = intPreferencesKey("usage_nudge_minutes")
+        val SHOW_LIFE_CALENDAR = booleanPreferencesKey("show_life_calendar")
     }
 
     companion object {
@@ -129,7 +130,8 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
                     mindfulMessage = preferences[PreferencesKeys.MINDFUL_MESSAGE] ?: "IS THIS\nINTENTIONAL?",
                     blockShortFormContent = preferences[PreferencesKeys.BLOCK_SHORT_FORM_CONTENT] ?: false,
                     usageNudgeEnabled = preferences[PreferencesKeys.USAGE_NUDGE_ENABLED] ?: false,
-                    usageNudgeMinutes = preferences[PreferencesKeys.USAGE_NUDGE_MINUTES] ?: 15
+                    usageNudgeMinutes = preferences[PreferencesKeys.USAGE_NUDGE_MINUTES] ?: 15,
+                    showLifeCalendar = preferences[PreferencesKeys.SHOW_LIFE_CALENDAR] ?: true
                 )
             }
     }
@@ -341,6 +343,19 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
         }
     }
 
+    /**
+     * Sets whether the life calendar page is part of the launcher at all.
+     *
+     * The calendar is the app's signature feature but also its most confronting one, so it is
+     * opt-out: when false the pager drops to two pages (home and app drawer) and the mortality
+     * grid is never shown.
+     */
+    suspend fun saveShowLifeCalendar(show: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SHOW_LIFE_CALENDAR] = show
+        }
+    }
+
     suspend fun restoreAll(
         birthDateEpochDays: Long?,
         lifeExpectancy: Int,
@@ -358,7 +373,8 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
         mindfulMessage: String,
         blockShortFormContent: Boolean,
         usageNudgeEnabled: Boolean,
-        usageNudgeMinutes: Int
+        usageNudgeMinutes: Int,
+        showLifeCalendar: Boolean = true
     ) {
         dataStore.edit { preferences ->
             if (birthDateEpochDays != null) {
@@ -382,6 +398,7 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
             preferences[PreferencesKeys.BLOCK_SHORT_FORM_CONTENT] = blockShortFormContent
             preferences[PreferencesKeys.USAGE_NUDGE_ENABLED] = usageNudgeEnabled
             preferences[PreferencesKeys.USAGE_NUDGE_MINUTES] = usageNudgeMinutes
+            preferences[PreferencesKeys.SHOW_LIFE_CALENDAR] = showLifeCalendar
         }
     }
 
@@ -399,7 +416,8 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
         lifeExpectancy: Int,
         wallpaperTarget: WallpaperTarget,
         theme: CalendarTheme,
-        dotStyle: DotStyle
+        dotStyle: DotStyle,
+        showLifeCalendar: Boolean = true
     ) {
         dataStore.edit { preferences ->
             if (birthDate != null) {
@@ -411,6 +429,7 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
             preferences[PreferencesKeys.WALLPAPER_TARGET] = wallpaperTarget.name
             preferences[PreferencesKeys.THEME] = theme.name
             preferences[PreferencesKeys.DOT_STYLE] = dotStyle.name
+            preferences[PreferencesKeys.SHOW_LIFE_CALENDAR] = showLifeCalendar
             preferences[PreferencesKeys.IS_SETUP_COMPLETE] = true
         }
     }
@@ -436,6 +455,7 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
  * @property blockShortFormContent Whether the accessibility service is instructed to block shorts/reels.
  * @property usageNudgeEnabled Whether to re-trigger mindful overlay after extended distracting app use.
  * @property usageNudgeMinutes How many continuous minutes in a distracting app before a nudge fires.
+ * @property showLifeCalendar Whether the life calendar page is included in the launcher at all.
  */
 data class UserPreferences(
     val birthDate: LocalDate?,
@@ -454,7 +474,8 @@ data class UserPreferences(
     val mindfulMessage: String,
     val blockShortFormContent: Boolean,
     val usageNudgeEnabled: Boolean,
-    val usageNudgeMinutes: Int
+    val usageNudgeMinutes: Int,
+    val showLifeCalendar: Boolean = true
 )
 
 enum class SearchBarPosition {

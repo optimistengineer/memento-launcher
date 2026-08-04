@@ -122,7 +122,7 @@ fun MementoApp(
             ) {
                 composable(Screen.Onboarding.route) {
                     OnboardingScreen(
-                        onComplete = { birthDate, lifeExpectancy ->
+                        onComplete = { birthDate, lifeExpectancy, showLifeCalendar ->
                             // Only trigger the DataStore write here.
                             // DO NOT call startActivity immediately — completeOnboarding is
                             // async (DataStore write inside a coroutine). If we launch
@@ -133,7 +133,7 @@ fun MementoApp(
                             // Once the write finishes, it emits true and the LaunchedEffect above
                             // handles the LauncherActivity transition — guaranteed to run only
                             // after the data is on disk.
-                            viewModel.completeOnboarding(birthDate, lifeExpectancy)
+                            viewModel.completeOnboarding(birthDate, lifeExpectancy, showLifeCalendar)
                         }
                     )
                 }

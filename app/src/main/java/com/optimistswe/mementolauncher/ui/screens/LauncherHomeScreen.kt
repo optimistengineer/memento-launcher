@@ -48,6 +48,8 @@ fun LauncherHomeScreen(
     screenTime: String? = null,
     hasUsagePermission: Boolean = false,
     isBirthday: Boolean = false,
+    /** Whether the life calendar page exists, so the swipe hint matches reality. */
+    showCalendar: Boolean = true,
     onLaunchApp: (String) -> Unit,
     onRemoveFavorite: (String) -> Unit,
     onOpenSearch: () -> Unit,
@@ -171,7 +173,8 @@ fun LauncherHomeScreen(
             // SWIPE HINT
             Box(modifier = Modifier.fillMaxWidth()) {
                 DotText(
-                    text = "<  CALENDAR  |  APPS  >",
+                    // Must match the pages that actually exist — the calendar page is optional.
+                    text = if (showCalendar) "<  CALENDAR    APPS  >" else "APPS  >",
                     color = faint,
                     dotSize = 1.5.dp,
                     spacing = 0.5.dp,

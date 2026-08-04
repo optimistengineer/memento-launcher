@@ -33,6 +33,8 @@ fun LifeCalendarSettings(
     initialExpanded: Boolean = true,
     onBirthDateChange: (LocalDate) -> Unit,
     onLifeExpectancyChange: (Int) -> Unit,
+    showLifeCalendar: Boolean = true,
+    onShowLifeCalendarChange: (Boolean) -> Unit = {},
     onBg: Color,
     bg: Color,
     dimmed: Color,
@@ -86,6 +88,41 @@ fun LifeCalendarSettings(
                         color = if (birthDate != null) onBg else dimmed,
                         dotSize = 2.5.dp,
                         spacing = 0.8.dp
+                    )
+                }
+
+                Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(faint))
+
+                // Show/hide the calendar page entirely. Offered because a grid counting the
+                // weeks you have left is not something every user wants on their home screen.
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        DotText(
+                            text = "SHOW CALENDAR PAGE",
+                            color = onBg,
+                            dotSize = 1.5.dp,
+                            spacing = 0.5.dp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        DotText(
+                            text = "SWIPE LEFT FROM HOME",
+                            color = dimmed,
+                            dotSize = 1.dp,
+                            spacing = 0.4.dp
+                        )
+                    }
+                    androidx.compose.material3.Switch(
+                        checked = showLifeCalendar,
+                        onCheckedChange = onShowLifeCalendarChange,
+                        colors = androidx.compose.material3.SwitchDefaults.colors(
+                            checkedThumbColor = bg,
+                            checkedTrackColor = onBg,
+                            uncheckedThumbColor = dimmed,
+                            uncheckedTrackColor = cardBg
+                        )
                     )
                 }
 
