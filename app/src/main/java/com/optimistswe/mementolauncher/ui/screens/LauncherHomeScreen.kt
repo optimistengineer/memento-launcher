@@ -57,6 +57,9 @@ fun LauncherHomeScreen(
     val bg = MaterialTheme.colorScheme.background
     val dimmed = onBg.copy(alpha = 0.35f)
     val faint = onBg.copy(alpha = 0.15f)
+    // The date is the clock's companion line, not a hint — 0.35 on black sits under ~4:1
+    // contrast, which is below WCAG AA even for large text.
+    val dateColor = onBg.copy(alpha = 0.55f)
 
     Box(
         modifier = Modifier
@@ -88,17 +91,20 @@ fun LauncherHomeScreen(
                 spacing = 2.dp
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            // The clock stands ~126px tall, so a 12dp gap left the date crowded against it —
+            // it read as an orphaned fragment rather than a second line. Roughly a third of
+            // the clock's height gives the pair room to read as one block.
+            Spacer(modifier = Modifier.height(22.dp))
 
             // DATE
             DotText(
                 text = currentDate,
-                color = dimmed,
-                dotSize = 3.dp,
-                spacing = 1.dp
+                color = dateColor,
+                dotSize = 3.2.dp,
+                spacing = 1.1.dp
             )
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             // BIRTHDAY
             if (isBirthday) {

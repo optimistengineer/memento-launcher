@@ -83,26 +83,10 @@ fun DockCornerIcon(
 }
 
 /**
- * Maps common package names to custom [DotIconType].
- * Returns null if no custom icon is available (fallback to system icon).
+ * Maps a package name to a custom [DotIconType], or null to fall back to the system icon.
+ *
+ * Delegates to the shared resolver in DotIcon.kt so the dock, the dock picker and anywhere
+ * else that wants a dot glyph all agree on the same mapping.
  */
-private fun getIconTypeForPackage(packageName: String): DotIconType? {
-    return when {
-        packageName.contains("dialer", ignoreCase = true) ||
-        packageName.contains("phone", ignoreCase = true) -> DotIconType.PHONE
-
-        packageName.contains("messaging", ignoreCase = true) ||
-        packageName.contains("mms", ignoreCase = true) -> DotIconType.MESSAGE
-
-        packageName.contains("camera", ignoreCase = true) -> DotIconType.CAMERA
-
-        packageName.contains("calculator", ignoreCase = true) -> DotIconType.CALCULATOR
-
-        packageName.contains("maps", ignoreCase = true) -> DotIconType.MAPS
-
-        packageName.contains("photos", ignoreCase = true) ||
-        packageName.contains("gallery", ignoreCase = true) -> DotIconType.PHOTOS
-
-        else -> null // no custom icon, use system icon
-    }
-}
+private fun getIconTypeForPackage(packageName: String): DotIconType? =
+    dotIconForPackage(packageName)

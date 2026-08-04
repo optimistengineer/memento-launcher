@@ -152,17 +152,26 @@ private fun DockCornerPicker(
                     .padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // Any installed app can go in a dock corner. This used to be filtered to
+                // package names containing dialer/phone/messaging/camera/calculator/maps/
+                // photos/gallery, which made it impossible to dock anything else and left
+                // the picker completely empty on ROMs whose package names do not match
+                // those words. QuickAccessDock already falls back to the real app icon for
+                // anything without a dot glyph, so the restriction bought nothing.
                 val dockEligible = remember(allApps) {
-                    allApps.filter { app ->
-                        val pkg = app.packageName.lowercase()
-                        pkg.contains("dialer") || pkg.contains("phone") ||
-                        pkg.contains("messaging") || pkg.contains("mms") ||
-                        pkg.contains("camera") ||
-                        pkg.contains("calculator") ||
-                        pkg.contains("maps") ||
-                        pkg.contains("photos") || pkg.contains("gallery")
-                    }.sortedBy { it.label.lowercase() }
+                    allApps.sortedBy { it.label.lowercase() }
                 }
+
+                if (dockEligible.isEmpty()) {
+                    DotText(
+                        text = "NO APPS AVAILABLE",
+                        color = dimmed,
+                        dotSize = 1.2.dp,
+                        spacing = 0.4.dp,
+                        modifier = Modifier.padding(vertical = 6.dp)
+                    )
+                }
+
                 dockEligible.forEach { app ->
                     val isSelected = app.packageName == selectedPkg
                     DotText(
