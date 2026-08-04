@@ -63,8 +63,13 @@ fun WallpaperScreen(
     val bg = MaterialTheme.colorScheme.background
     val onBg = MaterialTheme.colorScheme.onBackground
     val dimmed = onBg.copy(alpha = 0.35f)
-    val faint = onBg.copy(alpha = 0.12f)
-    val labelColor = onBg.copy(alpha = 0.25f)
+    // These were 0.12 (1.27:1) and 0.25 (2.03:1) — both carrying real text, not decoration.
+    // CalendarImageGenerator draws the *same* labels into the wallpaper bitmap at 0xFF888888
+    // (5.9:1) and the same unlived dots at 0xFF4A4A4A, so the in-app page was roughly three
+    // times fainter than this app's own choice for identical content. Adopt those values so
+    // the screen and the wallpaper agree.
+    val gridEmpty = onBg.copy(alpha = 0.29f)    // #4A4A4A — the generator's emptyColor
+    val labelColor = onBg.copy(alpha = 0.53f)   // #878787 — the generator's labelColor
 
     // System bars handled by LauncherRootScreen.systemBarsPadding().
     // contentAlignment = Center vertically centers the Column since it uses fillMaxWidth
@@ -93,7 +98,7 @@ fun WallpaperScreen(
                 Spacer(modifier = Modifier.height(16.dp))
                 DotText(
                     text = "IN SETTINGS",
-                    color = faint,
+                    color = labelColor,
                     dotSize = 2.dp,
                     spacing = 0.7.dp
                 )
@@ -196,7 +201,7 @@ fun WallpaperScreen(
                         LifeCalendarGrid(
                             metrics = metrics,
                             filledColor = onBg,
-                            emptyColor = faint,
+                            emptyColor = gridEmpty,
                             rowSpacing = rowSpacingPx,
                             animatePulse = isActive,
                             modifier = Modifier
@@ -225,7 +230,7 @@ fun WallpaperScreen(
                         Spacer(modifier = Modifier.height(6.dp))
                         DotText(
                             text = lifeProgressText,
-                            color = faint,
+                            color = labelColor,
                             dotSize = 1.5.dp,
                             spacing = 0.5.dp
                         )

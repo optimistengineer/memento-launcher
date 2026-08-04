@@ -214,7 +214,10 @@ fun LauncherRootScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .systemBarsPadding()
-                    .background(Color.Black)
+                    // Must follow the theme. Hardcoding black here while MementoTheme is set to
+                    // LIGHT makes onBackground near-black, i.e. near-black text on a black
+                    // ground — the entire launcher rendered invisible.
+                    .background(MaterialTheme.colorScheme.background)
             ) {
                 // Only show the matrix grid background on Home (page 1) and App Drawer (page 2).
                 // The calendar page (page 0) is pure content — dots on black — so the grid
@@ -415,7 +418,8 @@ fun LauncherRootScreen(
 @Composable
 private fun MatrixGridBackground() {
     val dotMatrixColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.15f)
-    Canvas(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+    val surface = MaterialTheme.colorScheme.background
+    Canvas(modifier = Modifier.fillMaxSize().background(surface)) {
         val spacing = 48.dp.toPx()
         val radius = 2.dp.toPx()
         val rows = (size.height / spacing).toInt() + 1

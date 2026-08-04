@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import com.optimistswe.mementolauncher.data.AppInfo
 import com.optimistswe.mementolauncher.ui.components.DotIcon
 import com.optimistswe.mementolauncher.ui.components.DotIconType
+import com.optimistswe.mementolauncher.ui.components.AutoScaledDotText
 import com.optimistswe.mementolauncher.ui.components.DotText
 
 /**
@@ -57,8 +58,11 @@ fun LauncherHomeScreen(
 ) {
     val onBg = MaterialTheme.colorScheme.onBackground
     val bg = MaterialTheme.colorScheme.background
-    val dimmed = onBg.copy(alpha = 0.35f)
-    val faint = onBg.copy(alpha = 0.15f)
+    // 0.15 alpha on black composites to #262626 — 1.39:1, far under the 4.5:1 WCAG floor.
+    // Everything using this on this screen is text, including the only first-run instruction
+    // ("SWIPE RIGHT TO ADD APPS") and the only signpost that other pages exist.
+    // 0.46 gives #757575 = 4.56:1; 0.45 still misses at 4.43:1.
+    val faint = onBg.copy(alpha = 0.46f)
     // The date is the clock's companion line, not a hint — 0.35 on black sits under ~4:1
     // contrast, which is below WCAG AA even for large text.
     val dateColor = onBg.copy(alpha = 0.55f)
@@ -86,11 +90,17 @@ fun LauncherHomeScreen(
                 .padding(top = 48.dp, bottom = 24.dp, start = 32.dp, end = 32.dp)
         ) {
             // CLOCK
-            DotText(
+            // AutoScaledDotText, not DotText: at dotSize 8.dp the 12-hour ("04:22 PM", 378dp)
+            // and with-seconds ("04:22:33", 368dp) styles both exceed the 329dp of usable width
+            // on a 393dp-wide phone, and DotText neither wraps nor truncates — it just drew past
+            // the edge and got clipped. This scales down only when it has to, so the common
+            // 24-hour case renders identically.
+            AutoScaledDotText(
                 text = currentTime,
                 color = onBg,
-                dotSize = 8.dp,
-                spacing = 2.dp
+                baseDotSize = 8.dp,
+                baseSpacing = 2.dp,
+                alignment = Alignment.Start
             )
 
             // The clock stands ~126px tall, so a 12dp gap left the date crowded against it —

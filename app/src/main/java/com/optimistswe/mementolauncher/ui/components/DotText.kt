@@ -123,7 +123,14 @@ fun AutoScaledDotText(
 ) {
     BoxWithConstraints(
         modifier = modifier.fillMaxWidth(),
-        contentAlignment = Alignment.Center
+        // Honour `alignment` for the block's position, not just for wrapped lines inside it.
+        // This Box fills the width, so pinning it to Center made every caller centred no matter
+        // what they asked for — a Start-aligned caller silently came out centred.
+        contentAlignment = when (alignment) {
+            Alignment.End -> Alignment.CenterEnd
+            Alignment.Start -> Alignment.CenterStart
+            else -> Alignment.Center
+        }
     ) {
         val density = androidx.compose.ui.platform.LocalDensity.current
         val maxWidthDp = with(density) { constraints.maxWidth.toDp() }
