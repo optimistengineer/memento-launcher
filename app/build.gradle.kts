@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -6,6 +8,24 @@ plugins {
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
 }
+
+// Release signing is supplied out-of-band so no key material lands in git.
+// Either create keystore.properties in the project root (it is gitignored):
+//     storeFile=/absolute/path/to/release.jks
+//     storePassword=...
+//     keyAlias=...
+//     keyPassword=...
+// or set MEMENTO_STORE_FILE / MEMENTO_STORE_PASSWORD / MEMENTO_KEY_ALIAS /
+// MEMENTO_KEY_PASSWORD in the environment (for CI).
+val keystoreProperties = Properties().apply {
+    val f = rootProject.file("keystore.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+fun signingValue(propKey: String, envKey: String): String? =
+    keystoreProperties.getProperty(propKey) ?: System.getenv(envKey)
+
+val releaseStoreFile = signingValue("storeFile", "MEMENTO_STORE_FILE")
+val hasReleaseSigning = releaseStoreFile != null && file(releaseStoreFile).exists()
 
 android {
     namespace = "com.optimistswe.mementolauncher"
@@ -21,8 +41,26 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseStoreFile!!)
+                storePassword = signingValue("storePassword", "MEMENTO_STORE_PASSWORD")
+                keyAlias = signingValue("keyAlias", "MEMENTO_KEY_ALIAS")
+                keyPassword = signingValue("keyPassword", "MEMENTO_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            // Deliberately left unsigned when no keystore is configured, rather than falling
+            // back to the debug key — a debug-signed artifact must never be shippable by
+            // accident. `assembleRelease` still builds and R8 still runs, so the release path
+            // stays testable without key material.
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
