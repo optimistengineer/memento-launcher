@@ -251,6 +251,7 @@ fun LauncherRootScreen(
                             WallpaperScreen(
                                 metrics = lifeMetrics,
                                 lifeProgressText = lifeProgress,
+                                isActive = pagerState.currentPage == 0,
                                 onOpenSettings = {
                                     keyboardController?.hide()
                                     focusManager.clearFocus()

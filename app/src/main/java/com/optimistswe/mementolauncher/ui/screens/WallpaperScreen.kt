@@ -29,6 +29,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -51,7 +52,13 @@ import com.optimistswe.mementolauncher.ui.components.DotText
 fun WallpaperScreen(
     metrics: CalendarMetrics?,
     lifeProgressText: String,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    /**
+     * Whether this page is the one the user is actually looking at. The pager keeps this page
+     * composed while the user is on the home page, so the current-week pulse must not animate
+     * unless this is true — otherwise it drives a frame every frame off-screen.
+     */
+    isActive: Boolean = true
 ) {
     val bg = MaterialTheme.colorScheme.background
     val onBg = MaterialTheme.colorScheme.onBackground
@@ -191,6 +198,7 @@ fun WallpaperScreen(
                             filledColor = onBg,
                             emptyColor = faint,
                             rowSpacing = rowSpacingPx,
+                            animatePulse = isActive,
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxHeight()
@@ -240,6 +248,7 @@ private fun LifeCalendarGrid(
     filledColor: Color,
     emptyColor: Color,
     rowSpacing: Float = 1f,
+    animatePulse: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val columns = 52
@@ -250,60 +259,107 @@ private fun LifeCalendarGrid(
     // drawn outside the grid.
     val currentWeekIndex = if (weeksLived in 1..(rows * columns)) weeksLived - 1 else -1
 
-    // Pulsing animation for the current week's dot
-    val pulseTransition = rememberInfiniteTransition(label = "currentWeekPulse")
-    val pulseScale by pulseTransition.animateFloat(
-        initialValue = 1.0f,
-        targetValue = 1.8f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulseScale"
-    )
-    val pulseAlpha by pulseTransition.animateFloat(
-        initialValue = 0.6f,
-        targetValue = 0.0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulseAlpha"
-    )
+    Box(modifier = modifier) {
+        // Static dots. This Canvas deliberately reads NO animated state, and graphicsLayer puts
+        // it in its own RenderNode so its display list is reused rather than re-recorded every
+        // time the pulse above invalidates. Without that isolation the thousands of circles
+        // below would be re-rasterised on every animation frame.
+        Canvas(modifier = Modifier.fillMaxSize().graphicsLayer()) {
+            val cellSize = cellSizeFor(size.width, columns)
+            val radius = cellSize * 0.4f
 
-    Canvas(modifier = modifier) {
-        val availableWidth = size.width
-        val colSpacing = 1f
-
-        val cellSize = ((availableWidth - (columns - 1) * colSpacing) / columns).coerceAtLeast(1f)
-        val radius = cellSize * 0.4f
-
-        // Draw static dots (filled + empty) — these don't change per frame
-        var weekIndex = 0
-        for (row in 0 until rows) {
-            for (col in 0 until columns) {
-                if (weekIndex == currentWeekIndex) { weekIndex++; continue }
-                val cx = col * (cellSize + colSpacing) + cellSize / 2f
-                val cy = row * (cellSize + rowSpacing) + cellSize / 2f
-                val isFilled = weekIndex < weeksLived
-
-                if (isFilled) {
-                    drawCircle(color = filledColor, radius = radius, center = Offset(cx, cy))
-                } else {
-                    drawCircle(color = emptyColor, radius = radius * 0.6f, center = Offset(cx, cy))
+            var weekIndex = 0
+            for (row in 0 until rows) {
+                for (col in 0 until columns) {
+                    if (weekIndex == currentWeekIndex) { weekIndex++; continue }
+                    val cx = col * (cellSize + COL_SPACING) + cellSize / 2f
+                    val cy = row * (cellSize + rowSpacing) + cellSize / 2f
+                    if (weekIndex < weeksLived) {
+                        drawCircle(color = filledColor, radius = radius, center = Offset(cx, cy))
+                    } else {
+                        drawCircle(color = emptyColor, radius = radius * 0.6f, center = Offset(cx, cy))
+                    }
+                    weekIndex++
                 }
-                weekIndex++
             }
         }
 
-        // Draw pulsing current week dot (only element that changes per frame)
+        // The pulsing current-week marker, in its own Canvas so that the per-frame animation
+        // invalidates only this layer instead of the entire grid.
         if (currentWeekIndex >= 0) {
-            val currentRow = currentWeekIndex / columns
-            val currentCol = currentWeekIndex % columns
-            val cx = currentCol * (cellSize + colSpacing) + cellSize / 2f
-            val cy = currentRow * (cellSize + rowSpacing) + cellSize / 2f
-            val currentWeekColor = Color(0xFF228B22)
-            drawCircle(color = currentWeekColor, radius = radius, center = Offset(cx, cy))
+            CurrentWeekPulse(
+                currentWeekIndex = currentWeekIndex,
+                columns = columns,
+                rowSpacing = rowSpacing,
+                animate = animatePulse,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+    }
+}
+
+private const val COL_SPACING = 1f
+
+private fun cellSizeFor(availableWidth: Float, columns: Int): Float =
+    ((availableWidth - (columns - 1) * COL_SPACING) / columns).coerceAtLeast(1f)
+
+/**
+ * The pulsing "you are here" dot.
+ *
+ * @param animate when false, no infinite transition is created at all. An infiniteRepeatable
+ *   never reaches a finished state, so while one exists it requests a frame every frame for as
+ *   long as it is composed. The pager keeps this page composed while the user is on the home
+ *   page ([HorizontalPager] with beyondViewportPageCount = 1), so an unconditional animation
+ *   here kept the launcher rendering ~26fps while completely idle — measured at 258 frames over
+ *   10 idle seconds, against 0 for a system app on the same device.
+ */
+@Composable
+private fun CurrentWeekPulse(
+    currentWeekIndex: Int,
+    columns: Int,
+    rowSpacing: Float,
+    animate: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val pulseScale: Float
+    val pulseAlpha: Float
+    if (animate) {
+        val transition = rememberInfiniteTransition(label = "currentWeekPulse")
+        val scale by transition.animateFloat(
+            initialValue = 1.0f,
+            targetValue = 1.8f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(900, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "pulseScale"
+        )
+        val alpha by transition.animateFloat(
+            initialValue = 0.6f,
+            targetValue = 0.0f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(900, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "pulseAlpha"
+        )
+        pulseScale = scale
+        pulseAlpha = alpha
+    } else {
+        // Resting state: solid dot, no halo.
+        pulseScale = 1.0f
+        pulseAlpha = 0f
+    }
+
+    Canvas(modifier = modifier) {
+        val cellSize = cellSizeFor(size.width, columns)
+        val radius = cellSize * 0.4f
+        val cx = (currentWeekIndex % columns) * (cellSize + COL_SPACING) + cellSize / 2f
+        val cy = (currentWeekIndex / columns) * (cellSize + rowSpacing) + cellSize / 2f
+        val currentWeekColor = Color(0xFF228B22)
+
+        drawCircle(color = currentWeekColor, radius = radius, center = Offset(cx, cy))
+        if (pulseAlpha > 0f) {
             drawCircle(
                 color = currentWeekColor.copy(alpha = pulseAlpha),
                 radius = radius * pulseScale,
