@@ -27,10 +27,20 @@ import com.optimistswe.mementolauncher.domain.LifeCalendarCalculator
  */
 class CalendarImageGenerator {
 
-    // Reusable Paint and Path objects to avoid per-cell allocation
-    private val paint = Paint().apply { isAntiAlias = true }
-    private val labelPaint = Paint().apply { isAntiAlias = true; style = Paint.Style.FILL }
-    private val diamondPath = Path()
+    /**
+     * Paint and Path for one generate() call.
+     *
+     * These used to be fields on the generator, which made a single instance unsafe to use from
+     * two threads — and generation is cancellable, so two overlapping calls were possible. They
+     * are allocated once per call rather than once per cell, which is what the original comment
+     * was actually protecting against, so the optimisation is unchanged while the shared mutable
+     * state is gone.
+     */
+    private class DrawState {
+        val paint = Paint().apply { isAntiAlias = true }
+        val labelPaint = Paint().apply { isAntiAlias = true; style = Paint.Style.FILL }
+        val diamondPath = Path()
+    }
 
     /**
      * Generates a calendar bitmap based on the provided metrics and configuration.
@@ -57,10 +67,11 @@ class CalendarImageGenerator {
             config.copy(width = safeWidth, height = safeHeight)
         } else config
         val layout = calculateLayout(metrics.lifeExpectancy, safeConfig)
+        val state = DrawState()
 
         // Draw in order: labels first, then grid on top
-        drawLabels(canvas, layout, safeConfig)
-        drawGrid(canvas, metrics, layout, safeConfig)
+        drawLabels(canvas, layout, safeConfig, state)
+        drawGrid(canvas, metrics, layout, safeConfig, state)
 
         return bitmap
     }
@@ -76,7 +87,7 @@ class CalendarImageGenerator {
     /**
      * Draws labels around the grid using dot-matrix style.
      */
-    private fun drawLabels(canvas: Canvas, layout: Layout, config: CalendarConfig) {
+    private fun drawLabels(canvas: Canvas, layout: Layout, config: CalendarConfig, state: DrawState) {
         // Calculate dot parameters based on screen width to match text size
         // Standard text size is ~1.8% of width. 
         // A 5-row dot char is approx 5*dotSize + 4*spacing high.
@@ -95,8 +106,8 @@ class CalendarImageGenerator {
 
         // Top-left label: "WEEK OF THE YEAR"
         drawDotText(
-            canvas, "WEEK OF THE YEAR", layout.gridStartX, labelY, 
-            color, dotSize, spacing
+            canvas, "WEEK OF THE YEAR", layout.gridStartX, labelY,
+            color, dotSize, spacing, state
         )
 
         // Top-right label: "MEMENTO"
@@ -104,7 +115,7 @@ class CalendarImageGenerator {
         drawDotText(
             canvas, "MEMENTO",
             layout.gridStartX + layout.gridWidth - mementoWidth, labelY,
-            color, dotSize, spacing
+            color, dotSize, spacing, state
         )
 
         // Left side label: "YEAR OF YOUR LIFE" (rotated 90° counter-clockwise)
@@ -122,8 +133,8 @@ class CalendarImageGenerator {
         drawDotText(
             canvas, yearLabelText,
             leftLabelX - (yearLabelWidth / 2),
-            leftLabelY - (intendedHeight / 2), // Adjust for height of text 
-            color, dotSize, spacing
+            leftLabelY - (intendedHeight / 2), // Adjust for height of text
+            color, dotSize, spacing, state
         )
 
         canvas.restore()
@@ -138,8 +149,11 @@ class CalendarImageGenerator {
         canvas: Canvas,
         metrics: CalendarMetrics,
         layout: Layout,
-        config: CalendarConfig
+        config: CalendarConfig,
+        state: DrawState
     ) {
+        val paint = state.paint
+        val diamondPath = state.diamondPath
         var weekIndex = 0
 
         for (row in 0 until layout.rows) {
@@ -211,8 +225,10 @@ class CalendarImageGenerator {
         startY: Float,
         color: Int,
         dotSize: Float,
-        spacing: Float
+        spacing: Float,
+        state: DrawState
     ) {
+        val labelPaint = state.labelPaint
         labelPaint.color = color
 
         var currentX = startX

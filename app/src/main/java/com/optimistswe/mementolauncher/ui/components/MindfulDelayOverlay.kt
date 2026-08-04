@@ -27,6 +27,13 @@ import kotlinx.coroutines.delay
 @Composable
 fun MindfulDelayOverlay(
     message: String,
+    /**
+     * The package being intercepted. The countdown is keyed on this rather than on [appName]
+     * because a label is not an identity: two apps can share one, and it is null whenever the
+     * package is not in the loaded app list — in which case switching between two such apps
+     * would have carried the previous countdown over instead of restarting it.
+     */
+    packageName: String,
     appName: String? = null,
     onProceed: () -> Unit,
     onCancel: () -> Unit
@@ -34,10 +41,10 @@ fun MindfulDelayOverlay(
     val onBg = MaterialTheme.colorScheme.onBackground
     val dimmed = onBg.copy(alpha = 0.5f)
 
-    var remainingSeconds by remember(appName) { mutableIntStateOf(5) }
-    var countdownFinished by remember(appName) { mutableStateOf(false) }
+    var remainingSeconds by remember(packageName) { mutableIntStateOf(5) }
+    var countdownFinished by remember(packageName) { mutableStateOf(false) }
 
-    LaunchedEffect(appName) {
+    LaunchedEffect(packageName) {
         while (remainingSeconds > 0) {
             delay(1000L)
             remainingSeconds--

@@ -392,7 +392,8 @@ fun LauncherRootScreen(
                 interceptedApp?.let { appPkg ->
                     val appName = viewModel.allApps.value.find { it.packageName == appPkg }?.label
                     MindfulDelayOverlay(
-                        message = preferences?.mindfulMessage ?: "IS THIS\nINTENTIONAL?",
+                        message = loadedPreferences.mindfulMessage,
+                        packageName = appPkg,
                         appName = appName,
                         onProceed = {
                             onLaunchApp(appPkg)

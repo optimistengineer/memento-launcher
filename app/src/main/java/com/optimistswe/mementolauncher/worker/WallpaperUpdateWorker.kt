@@ -71,6 +71,9 @@ class WallpaperUpdateWorker @AssistedInject constructor(
          */
         private const val UPDATE_INTERVAL_DAYS = 7L
 
+        /** Give up after this many attempts rather than retrying a permanent failure forever. */
+        private const val MAX_RETRY_ATTEMPTS = 3
+
         /**
          * Schedules the wallpaper update to run weekly.
          *
@@ -166,7 +169,12 @@ class WallpaperUpdateWorker @AssistedInject constructor(
 
                 when (result) {
                     is WallpaperResult.Success -> Result.success()
-                    is WallpaperResult.Error -> Result.retry()
+                    // Cap retries the same way the catch block below does. Without a cap, a device
+                    // where setting the wallpaper fails deterministically — one where
+                    // isSetWallpaperAllowed is false, for instance — retried forever on backoff,
+                    // regenerating a full-screen bitmap on every attempt.
+                    is WallpaperResult.Error ->
+                        if (runAttemptCount >= MAX_RETRY_ATTEMPTS) Result.failure() else Result.retry()
                 }
             } finally {
                 // Clean up bitmap to free memory even if setWallpaper throws
@@ -174,7 +182,7 @@ class WallpaperUpdateWorker @AssistedInject constructor(
             }
         } catch (e: Exception) {
             e.printStackTrace()
-            if (runAttemptCount >= 3) Result.failure() else Result.retry()
+            if (runAttemptCount >= MAX_RETRY_ATTEMPTS) Result.failure() else Result.retry()
         }
     }
 
@@ -185,10 +193,17 @@ class WallpaperUpdateWorker @AssistedInject constructor(
      */
     private fun getScreenDimensions(): Pair<Int, Int> {
         val windowManager = applicationContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        val metrics = DisplayMetrics()
-        @Suppress("DEPRECATION")
-        windowManager.defaultDisplay.getRealMetrics(metrics)
-        return Pair(metrics.widthPixels, metrics.heightPixels)
+        // defaultDisplay is deprecated from API 30 and unreliable from a non-visual context such
+        // as the application context this worker runs with. WindowMetrics is the supported path.
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            val bounds = windowManager.maximumWindowMetrics.bounds
+            Pair(bounds.width(), bounds.height())
+        } else {
+            val metrics = DisplayMetrics()
+            @Suppress("DEPRECATION")
+            windowManager.defaultDisplay.getRealMetrics(metrics)
+            Pair(metrics.widthPixels, metrics.heightPixels)
+        }
     }
 
     /**

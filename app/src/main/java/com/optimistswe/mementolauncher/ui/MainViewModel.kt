@@ -20,11 +20,13 @@ import com.optimistswe.mementolauncher.wallpaper.WallpaperUpdater
 import com.optimistswe.mementolauncher.worker.WallpaperUpdateWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import javax.inject.Inject
 
@@ -226,15 +228,22 @@ class MainViewModel @Inject constructor(
                 _metrics.value = metrics
 
                 val config = createConfig(prefs.theme, prefs.dotStyle)
-                val oldBitmap = previewBitmap
-                val newBitmap = generator.generate(metrics, config)
+                // Drawing allocates a full-screen bitmap and draws thousands of shapes. Doing that
+                // on viewModelScope's main dispatcher janked the UI during onboarding, which is
+                // the one place this preview is generated. Safe to move off-thread now that
+                // CalendarImageGenerator keeps its Paint/Path state per call.
+                val newBitmap = withContext(Dispatchers.Default) {
+                    generator.generate(metrics, config)
+                }
                 if (newBitmap != null) {
+                    // The previous bitmap is deliberately NOT recycled. It was recycled after a
+                    // delay(500) — a cancellation point outside any finally — so a cancelled
+                    // generation leaked it, and the delay itself was a guess at when Compose had
+                    // stopped drawing it. Recycling too early crashes; recycling too late leaks.
+                    // Since API 26 bitmap pixels live in the native heap tracked by
+                    // NativeAllocationRegistry, so simply dropping the reference lets GC reclaim
+                    // it correctly, with no window in which a live Canvas can touch freed memory.
                     previewBitmap = newBitmap
-                    // Delay recycle to give Compose time to stop referencing the old bitmap
-                    if (oldBitmap != null) {
-                        kotlinx.coroutines.delay(500)
-                        oldBitmap.recycle()
-                    }
                 }
             } finally {
                 isLoading = false
@@ -296,6 +305,9 @@ class MainViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
-        previewBitmap?.recycle()
+        // No explicit recycle: Compose may still be drawing this bitmap while the ViewModel is
+        // being torn down, and drawing a recycled bitmap throws. GC reclaims the native pixels
+        // once the last reference goes.
+        previewBitmap = null
     }
 }
