@@ -225,4 +225,57 @@ class FavoritesRepositoryTest {
         repository.seedDefaultFavorites(setOf("com.unrelated.app"))
         assertTrue(repository.getFavorites().first().isEmpty())
     }
+
+    // ═══════════════════════════════════════════
+    // Stale package scrubbing
+    // ═══════════════════════════════════════════
+
+    @Test
+    fun `scrubPackages drops favourites whose app is not installed`() = runTest(testDispatcher) {
+        repository.addFavorite("com.installed")
+        repository.addFavorite("com.gone")
+        repository.addFavorite("com.also.installed")
+
+        repository.scrubPackages(setOf("com.installed", "com.also.installed"))
+
+        assertEquals(
+            listOf("com.installed", "com.also.installed"),
+            repository.getFavorites().first()
+        )
+    }
+
+    @Test
+    fun `scrubPackages clears dock corners whose app is not installed`() = runTest(testDispatcher) {
+        repository.setDockLeftApp("com.gone")
+        repository.setDockRightApp("com.installed")
+
+        repository.scrubPackages(setOf("com.installed"))
+
+        assertNull("a dock corner pointing at a missing app must be cleared",
+            repository.getDockLeftApp().first())
+        assertEquals("com.installed", repository.getDockRightApp().first())
+    }
+
+    @Test
+    fun `scrubPackages does nothing when the app list has not loaded`() = runTest(testDispatcher) {
+        // An empty set means "not loaded yet", not "nothing is installed" — scrubbing on it
+        // would wipe every favourite on a slow first start.
+        repository.addFavorite("com.a")
+        repository.setDockLeftApp("com.a")
+
+        repository.scrubPackages(emptySet())
+
+        assertEquals(listOf("com.a"), repository.getFavorites().first())
+        assertEquals("com.a", repository.getDockLeftApp().first())
+    }
+
+    @Test
+    fun `scrubPackages leaves everything alone when all packages are installed`() = runTest(testDispatcher) {
+        repository.addFavorite("com.a")
+        repository.addFavorite("com.b")
+
+        repository.scrubPackages(setOf("com.a", "com.b", "com.other"))
+
+        assertEquals(listOf("com.a", "com.b"), repository.getFavorites().first())
+    }
 }

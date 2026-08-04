@@ -2,18 +2,24 @@ package com.optimistswe.mementolauncher.ui.screens
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -66,6 +72,11 @@ fun LauncherHomeScreen(
     // The date is the clock's companion line, not a hint — 0.35 on black sits under ~4:1
     // contrast, which is below WCAG AA even for large text.
     val dateColor = onBg.copy(alpha = 0.55f)
+
+    // Long-press used to remove a favourite instantly, with no confirmation, no undo and no
+    // indication the gesture even existed — an accidental long-press while reaching for the app
+    // silently unpinned it, and the user had to go find it in the drawer to put it back.
+    var pendingRemoval by remember { mutableStateOf<AppInfo?>(null) }
 
     Box(
         modifier = Modifier
@@ -156,7 +167,7 @@ fun LauncherHomeScreen(
                             .fillMaxWidth()
                             .combinedClickable(
                                 onClick = { onLaunchApp(app.packageName) },
-                                onLongClick = { onRemoveFavorite(app.packageName) }
+                                onLongClick = { pendingRemoval = app }
                             )
                             .padding(vertical = 14.dp)
                     ) {
@@ -217,6 +228,85 @@ fun LauncherHomeScreen(
                     .align(Alignment.BottomEnd)
                     .padding(end = 24.dp, bottom = 56.dp)
             )
+        }
+    }
+
+    pendingRemoval?.let { app ->
+        ConfirmRemoveFavourite(
+            appLabel = app.label,
+            onConfirm = {
+                onRemoveFavorite(app.packageName)
+                pendingRemoval = null
+            },
+            onDismiss = { pendingRemoval = null }
+        )
+    }
+}
+
+/** Confirmation for unpinning a home screen favourite. */
+@Composable
+private fun ConfirmRemoveFavourite(
+    appLabel: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val onBg = MaterialTheme.colorScheme.onBackground
+    val bg = MaterialTheme.colorScheme.background
+    val dimmed = onBg.copy(alpha = 0.55f)
+
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.9f)
+                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(20.dp))
+                .padding(24.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                DotText(
+                    text = "REMOVE FROM HOME?",
+                    color = onBg,
+                    dotSize = 2.2.dp,
+                    spacing = 0.7.dp
+                )
+                AutoScaledDotText(
+                    text = appLabel.uppercase(),
+                    color = dimmed,
+                    baseDotSize = 1.6.dp,
+                    baseSpacing = 0.55.dp,
+                    alignment = Alignment.Start
+                )
+                DotText(
+                    text = "IT STAYS IN THE APP DRAWER",
+                    color = onBg.copy(alpha = 0.4f),
+                    dotSize = 1.2.dp,
+                    spacing = 0.4.dp
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(46.dp)
+                            .background(onBg.copy(alpha = 0.10f), RoundedCornerShape(12.dp))
+                            .clickable(onClick = onDismiss),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        DotText(text = "KEEP", color = dimmed, dotSize = 1.6.dp, spacing = 0.55.dp)
+                    }
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(46.dp)
+                            .background(onBg, RoundedCornerShape(12.dp))
+                            .clickable(onClick = onConfirm),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        DotText(text = "REMOVE", color = bg, dotSize = 1.6.dp, spacing = 0.55.dp)
+                    }
+                }
+            }
         }
     }
 }

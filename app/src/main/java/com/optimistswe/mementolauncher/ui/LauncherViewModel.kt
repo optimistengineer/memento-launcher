@@ -318,6 +318,10 @@ class LauncherViewModel @Inject constructor(
                     val validPackages = apps.map { it.packageName }.toSet()
                     if (validPackages.isNotEmpty()) {
                         folderRepository.scrubPackages(validPackages)
+                        // Favourites and dock corners can hold packages that are not installed
+                        // here — restored from a cloud backup, or uninstalled while the launcher
+                        // was not running. They would render as inert home screen entries.
+                        favoritesRepository.scrubPackages(validPackages)
                     }
                 }
             }

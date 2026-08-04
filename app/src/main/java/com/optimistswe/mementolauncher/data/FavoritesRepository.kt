@@ -157,6 +157,31 @@ class FavoritesRepository(private val dataStore: DataStore<Preferences>) {
         }
     }
 
+    /**
+     * Drops favourites and dock corners whose package is no longer installed.
+     *
+     * Stale package names arrive from more than one direction: a restored cloud backup, an app
+     * uninstalled while the launcher was not running, or a user switching devices. Left in place
+     * they render as home screen entries that look tappable and silently do nothing, because
+     * getLaunchIntentForPackage returns null. FolderRepository already does this for folders.
+     *
+     * No-ops when [validPackages] is empty, since that means the app list has not loaded yet
+     * rather than that nothing is installed.
+     */
+    suspend fun scrubPackages(validPackages: Set<String>) {
+        if (validPackages.isEmpty()) return
+        dataStore.edit { preferences ->
+            val current = (preferences[FAVORITES_KEY] ?: "")
+                .split(",").filter { it.isNotBlank() }
+            val kept = current.filter { validPackages.contains(it) }
+            if (kept.size != current.size) {
+                preferences[FAVORITES_KEY] = kept.joinToString(",")
+            }
+            preferences[DOCK_LEFT_KEY]?.let { if (it !in validPackages) preferences.remove(DOCK_LEFT_KEY) }
+            preferences[DOCK_RIGHT_KEY]?.let { if (it !in validPackages) preferences.remove(DOCK_RIGHT_KEY) }
+        }
+    }
+
     /** Returns a [Flow] that emits whether the given package is in the favorites list. */
     fun isFavorite(packageName: String): Flow<Boolean> {
         return getFavorites().map { it.contains(packageName) }
