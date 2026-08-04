@@ -11,6 +11,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.compositionLocalOf
@@ -46,8 +48,17 @@ fun DotText(
         calculateLayout(text, scaledDotSize, scaledSpacing)
     }
 
+    // The glyphs are drawn as raw circles on a Canvas, so without this the text is invisible to
+    // accessibility services — the whole launcher surfaces to TalkBack as blank, unlabelled boxes.
+    // Blank strings are left unlabelled so they do not become empty focus stops.
+    val accessibilityModifier = remember(text) {
+        if (text.isNotBlank()) Modifier.semantics { contentDescription = text } else Modifier
+    }
+
     Canvas(
-        modifier = modifier.size(layout.width, layout.height)
+        modifier = modifier
+            .size(layout.width, layout.height)
+            .then(accessibilityModifier)
     ) {
         val dotPx = scaledDotSize.toPx()
         val spacePx = scaledSpacing.toPx()

@@ -7,6 +7,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -32,13 +34,19 @@ enum class DotIconType {
  * A custom icon component that renders shapes using a dot matrix style
  * to match the Memento aesthetic.
  */
+/**
+ * @param contentDescription Label announced by accessibility services. The icon is drawn as raw
+ *   circles on a Canvas, so without this it is invisible to TalkBack. Defaults to a readable form
+ *   of [type]; pass null for icons that are purely decorative alongside a labelled sibling.
+ */
 @Composable
 fun DotIcon(
     type: DotIconType,
     color: Color,
     modifier: Modifier = Modifier,
     dotSize: Dp = 3.dp,
-    spacing: Dp = 1.dp
+    spacing: Dp = 1.dp,
+    contentDescription: String? = type.name.lowercase().replaceFirstChar { it.uppercase() }
 ) {
     val fontScale = com.optimistswe.mementolauncher.ui.components.LocalFontScale.current
     val scaledDotSize = dotSize * fontScale
@@ -51,7 +59,14 @@ fun DotIcon(
     val width = (scaledDotSize * cols) + (scaledSpacing * (cols - 1))
     val height = (scaledDotSize * rows) + (scaledSpacing * (rows - 1))
 
-    Canvas(modifier = modifier.size(width, height)) {
+    val accessibilityModifier = remember(contentDescription) {
+        contentDescription
+            ?.takeIf { it.isNotBlank() }
+            ?.let { desc -> Modifier.semantics { this.contentDescription = desc } }
+            ?: Modifier
+    }
+
+    Canvas(modifier = modifier.size(width, height).then(accessibilityModifier)) {
         val dotPx = scaledDotSize.toPx()
         val spacePx = scaledSpacing.toPx()
         val radius = dotPx / 2f
