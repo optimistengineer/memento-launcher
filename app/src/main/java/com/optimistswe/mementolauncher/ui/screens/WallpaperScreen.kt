@@ -182,14 +182,31 @@ fun WallpaperScreen(
                     // the grid was measured 13dp narrower than it was actually drawn, making it
                     // ~3.5% taller than the height reserved for it even when it nominally fit.
                     val labelWidthPx = with(density) { VERTICAL_LABEL_WIDTH.toPx() }
-                    val rowSpacingPx = with(density) { ROW_SPACING.toPx() }
                     val columns = 52
                     val rows = metrics.lifeExpectancy
                     val availableWidthPx = constraints.maxWidth - labelWidthPx
                     val cellFromWidth = (availableWidthPx - COL_SPACING * (columns - 1)) / columns
+
                     // rows is user-controlled (50..120) and independent of the screen, so the
                     // height budget has to be able to win.
-                    val cellFromHeight = (constraints.maxHeight - rowSpacingPx * (rows - 1)) / rows
+                    val maxRowSpacingPx = with(density) { ROW_SPACING.toPx() }
+                    var rowSpacingPx = maxRowSpacingPx
+                    var cellFromHeight = (constraints.maxHeight - rowSpacingPx * (rows - 1)) / rows
+
+                    if (cellFromHeight < cellFromWidth) {
+                        // Height-bound. Let the row gap shrink with the cell rather than stay a
+                        // fixed 2dp: at 80 rows a fixed gap costs 79 x 2dp = 158dp of pure
+                        // spacing, which is comfortable in portrait but consumed most of the
+                        // ~218dp a landscape phone has — cells were starved to ~2px and the grid
+                        // collapsed into an unreadable strip. Deliberately scoped to this branch
+                        // so the width-bound case (every phone in portrait) keeps the roomier
+                        // fixed gap it was designed and verified with.
+                        val proportional =
+                            constraints.maxHeight / (rows + (rows - 1) * ROW_SPACING_RATIO)
+                        rowSpacingPx = minOf(maxRowSpacingPx, proportional * ROW_SPACING_RATIO)
+                        cellFromHeight = (constraints.maxHeight - rowSpacingPx * (rows - 1)) / rows
+                    }
+
                     val cellSizePx = minOf(cellFromWidth, cellFromHeight).coerceAtLeast(1f)
                     val gridHeightPx = cellSizePx * rows + rowSpacingPx * (rows - 1)
                     val gridHeightDp = with(density) { gridHeightPx.toDp() }
@@ -360,6 +377,13 @@ private val VERTICAL_LABEL_WIDTH = 15.dp
  * density instead of staying visually constant.
  */
 private val ROW_SPACING = 2.dp
+
+/**
+ * Row gap as a fraction of the cell size, used when [ROW_SPACING] would be too large for the
+ * available height. Keeps the grid's proportions recognisable on short viewports rather than
+ * letting a fixed gap consume the height budget and crush the cells.
+ */
+private const val ROW_SPACING_RATIO = 0.25f
 
 /**
  * The pulsing "you are here" dot.
