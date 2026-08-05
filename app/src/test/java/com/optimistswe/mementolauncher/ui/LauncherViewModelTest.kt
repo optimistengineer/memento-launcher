@@ -8,6 +8,7 @@ import com.optimistswe.mementolauncher.ui.managers.TimeManager
 import com.optimistswe.mementolauncher.ui.managers.WidgetManager
 import com.optimistswe.mementolauncher.ui.screens.AppDrawerItem
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import java.time.LocalDate
 import io.mockk.coVerify
 import io.mockk.every
@@ -48,7 +49,7 @@ class LauncherViewModelTest {
         Dispatchers.setMain(testDispatcher)
         
         // Default mocks
-        every { appRepository.observeApps() } returns flowOf(emptyList())
+        every { appRepository.observeApps() } returns flowOf(AppListUpdate(emptyList()))
         every { favoritesRepository.getFavorites() } returns flowOf(emptyList())
         
         val defaultPrefs = UserPreferences(
@@ -102,7 +103,7 @@ class LauncherViewModelTest {
             AppInfo("App B", "com.b", "b"),
             AppInfo("Game C", "com.c", "c")
         )
-        every { appRepository.observeApps() } returns flowOf(apps)
+        every { appRepository.observeApps() } returns flowOf(AppListUpdate(apps))
         
         createViewModel()
 
@@ -121,7 +122,7 @@ class LauncherViewModelTest {
         viewModel.toggleFavorite("com.test")
         testDispatcher.scheduler.advanceUntilIdle()
         
-        coVerify { favoritesRepository.addFavorite("com.test") }
+        coVerify { favoritesRepository.addFavorite("com.test", any()) }
     }
 
     @Test
@@ -130,7 +131,7 @@ class LauncherViewModelTest {
             AppInfo("App A", "com.a", "a"),
             AppInfo("App B", "com.b", "b")
         )
-        every { appRepository.observeApps() } returns flowOf(apps)
+        every { appRepository.observeApps() } returns flowOf(AppListUpdate(apps))
         
         val prefs = UserPreferences(
             birthDate = null,
@@ -165,7 +166,7 @@ class LauncherViewModelTest {
     @Test
     fun `filteredApps applies custom labels`() = runTest {
         val apps = listOf(AppInfo("Original", "com.test", "icon"))
-        every { appRepository.observeApps() } returns flowOf(apps)
+        every { appRepository.observeApps() } returns flowOf(AppListUpdate(apps))
         every { appLabelRepository.getCustomLabels() } returns flowOf(mapOf("com.test" to "Renamed"))
 
         createViewModel()
@@ -187,7 +188,7 @@ class LauncherViewModelTest {
             AppFolder(id = "1", name = "Fruit", packages = listOf("com.apple", "com.banana"))
         )
         
-        every { appRepository.observeApps() } returns flowOf(apps)
+        every { appRepository.observeApps() } returns flowOf(AppListUpdate(apps))
         every { folderRepository.folders } returns flowOf(folders)
         every { preferencesRepository.getUserPreferences() } returns flowOf(UserPreferences(
             null, 80, WallpaperTarget.BOTH, CalendarTheme.DARK, DotStyle.FILLED_CIRCLE,
@@ -436,7 +437,7 @@ class LauncherViewModelTest {
             AppInfo("Alpha", "com.a", "a"),
             AppInfo("Beta", "com.b", "b")
         )
-        every { appRepository.observeApps() } returns flowOf(apps)
+        every { appRepository.observeApps() } returns flowOf(AppListUpdate(apps))
         createViewModel()
 
         viewModel.filteredApps.test {
@@ -451,7 +452,7 @@ class LauncherViewModelTest {
             AppInfo("YouTube", "com.youtube", "yt"),
             AppInfo("Calculator", "com.calc", "calc")
         )
-        every { appRepository.observeApps() } returns flowOf(apps)
+        every { appRepository.observeApps() } returns flowOf(AppListUpdate(apps))
         createViewModel()
 
         viewModel.updateSearchQuery("youtube")
@@ -557,7 +558,7 @@ class LauncherViewModelTest {
             AppInfo("Calculator", "com.calc", "a"),
             AppInfo("Zebra", "com.zebra", "z")
         )
-        every { appRepository.observeApps() } returns flowOf(apps)
+        every { appRepository.observeApps() } returns flowOf(AppListUpdate(apps))
         every { folderRepository.folders } returns flowOf(
             listOf(
                 // Matches because it contains "Calculator".
@@ -588,7 +589,7 @@ class LauncherViewModelTest {
 
     @Test
     fun `a blank query keeps every folder including empty ones`() = runTest {
-        every { appRepository.observeApps() } returns flowOf(emptyList())
+        every { appRepository.observeApps() } returns flowOf(AppListUpdate(emptyList()))
         every { folderRepository.folders } returns flowOf(
             listOf(
                 AppFolder(id = "f1", name = "Alpha", packages = emptyList()),
@@ -661,5 +662,52 @@ class LauncherViewModelTest {
 
             cancelAndIgnoreRemainingEvents()
         }
+    }
+
+    // ═══════════════════════════════════════════
+    // Package removal vs. restored backups
+    // ═══════════════════════════════════════════
+    // The old behaviour scrubbed every stored package not currently installed on each app-list
+    // emission. Restoring a JSON backup on a new device names apps that are not installed yet,
+    // so the scrub permanently destroyed the restored favourites, dock slots and folder contents
+    // moments after the restore. The contract now: deletion happens only for packages observed
+    // transitioning installed -> gone between two emissions.
+
+    @Test
+    fun `an emission without an uninstall signal never removes stored packages`() = runTest(testDispatcher) {
+        // Covers both dangerous cases: the first look at the app list on a device that just
+        // restored a backup (stored packages not installed yet), and a package that merely
+        // *looks* gone — disabled in settings, mid-update, or on unmounted SD storage. Absence
+        // from the list is never evidence of an uninstall; only the broadcast is.
+        val appsFlow = MutableSharedFlow<AppListUpdate>(replay = 1)
+        every { appRepository.observeApps() } returns appsFlow
+        createViewModel()
+
+        appsFlow.emit(AppListUpdate(listOf(
+            AppInfo(label = "A", packageName = "com.a", activityName = "a.Main"),
+            AppInfo(label = "B", packageName = "com.b", activityName = "b.Main")
+        )))
+        // com.b vanishes from the list but there is NO removedPackage signal (transient).
+        appsFlow.emit(AppListUpdate(listOf(
+            AppInfo(label = "A", packageName = "com.a", activityName = "a.Main")
+        )))
+
+        coVerify(exactly = 0) { favoritesRepository.removePackages(any()) }
+        coVerify(exactly = 0) { folderRepository.removePackages(any()) }
+    }
+
+    @Test
+    fun `a broadcast-confirmed uninstall removes exactly that package`() = runTest(testDispatcher) {
+        val appsFlow = MutableSharedFlow<AppListUpdate>(replay = 1)
+        every { appRepository.observeApps() } returns appsFlow
+        createViewModel()
+
+        appsFlow.emit(AppListUpdate(
+            apps = listOf(AppInfo(label = "A", packageName = "com.a", activityName = "a.Main")),
+            removedPackage = "com.b"
+        ))
+
+        coVerify(exactly = 1) { favoritesRepository.removePackages(setOf("com.b")) }
+        coVerify(exactly = 1) { folderRepository.removePackages(setOf("com.b")) }
     }
 }

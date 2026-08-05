@@ -2,7 +2,9 @@ package com.optimistswe.mementolauncher.di
 
 import android.content.Context
 import androidx.datastore.core.DataStore
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.preferencesDataStore
 import com.optimistswe.mementolauncher.data.*
 import com.optimistswe.mementolauncher.ui.managers.TimeManager
@@ -58,10 +60,32 @@ annotation class IoDispatcher
 @Retention(AnnotationRetention.BINARY)
 annotation class MainDispatcher
 
-private val Context.preferencesDS: DataStore<Preferences> by preferencesDataStore(name = "life_calendar_preferences")
-private val Context.favoritesDS: DataStore<Preferences> by preferencesDataStore(name = "launcher_favorites")
-private val Context.appLabelsDS: DataStore<Preferences> by preferencesDataStore(name = "app_labels")
-private val Context.foldersDS: DataStore<Preferences> by preferencesDataStore(name = "folders")
+// Every store gets a ReplaceFileCorruptionHandler. Without one, a truncated or garbled
+// preferences_pb (half-written at power loss, mangled by a bad cloud restore) throws
+// CorruptionException on EVERY subsequent read and write, forever. The read paths all catch
+// IOException (CorruptionException extends it) and emit empty preferences — so the app quietly
+// behaved as a fresh install and sent the user back through onboarding — but the WRITE paths
+// were unguarded coroutine launches, so the moment the user re-entered their birth date the
+// launcher crashed, and would keep crashing on every attempt: a permanently bricked HOME app
+// that only a data-clear could fix. Replacing the corrupt file with empty preferences loses that
+// one store's settings once, which is exactly what the read path already pretended had happened
+// — but now the next write persists instead of killing the process.
+private val Context.preferencesDS: DataStore<Preferences> by preferencesDataStore(
+    name = "life_calendar_preferences",
+    corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() }
+)
+private val Context.favoritesDS: DataStore<Preferences> by preferencesDataStore(
+    name = "launcher_favorites",
+    corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() }
+)
+private val Context.appLabelsDS: DataStore<Preferences> by preferencesDataStore(
+    name = "app_labels",
+    corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() }
+)
+private val Context.foldersDS: DataStore<Preferences> by preferencesDataStore(
+    name = "folders",
+    corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() }
+)
 
 /**
  * Main Hilt module for the Memento application.

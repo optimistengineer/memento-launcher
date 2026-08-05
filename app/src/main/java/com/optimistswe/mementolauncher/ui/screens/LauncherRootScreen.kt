@@ -23,6 +23,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.optimistswe.mementolauncher.MainActivity
 import com.optimistswe.mementolauncher.data.BackgroundStyle
@@ -90,19 +91,42 @@ fun LauncherRootScreen(
         if (preferences?.clockStyle == com.optimistswe.mementolauncher.data.ClockStyle.H24_SEC) 1_000L else 30_000L
     }
 
-    // Periodically refreshes the clock while the root screen is active.
-    LaunchedEffect(clockIntervalMs) {
-        while (true) {
-            viewModel.refreshClock()
-            delay(clockIntervalMs)
+    // Both refresh loops are gated on the STARTED lifecycle state and aligned to the wall clock,
+    // fixing three problems the bare `LaunchedEffect { while(true) { ...; delay(n) } }` form had:
+    //
+    // 1. STALENESS AFTER SLEEP — the largest thing on the home screen showed the wrong time.
+    //    delay() counts elapsed-realtime-while-awake, so a night of deep sleep does not advance
+    //    it; and a LaunchedEffect survives the activity being stopped, so nothing re-ran on
+    //    resume either. Waking the phone at 07:30 against a 23:00 last-tick showed "23:00" until
+    //    the loop's next tick happened to land. repeatOnLifecycle cancels the block on ON_STOP
+    //    and restarts it from the top on ON_START, so the first thing that happens on every
+    //    return to the launcher is an immediate refresh.
+    //
+    // 2. PHASE DRIFT — a 30s poll with arbitrary phase displays a time up to ~30s behind even
+    //    while awake. Sleeping until just past the next interval boundary
+    //    (interval - now % interval) makes the refresh land right after the minute/second rolls.
+    //
+    // 3. BACKGROUND WORK FOREVER — the HOME activity lives for weeks, and these loops kept
+    //    re-formatting the clock and making UsageStats/AlarmManager/AppOps binder calls every
+    //    30s/60s the whole time the user was inside other apps, invisible. Now they simply stop
+    //    while the launcher is not visible.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner, clockIntervalMs) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                viewModel.refreshClock()
+                delay(clockIntervalMs - (System.currentTimeMillis() % clockIntervalMs))
+            }
         }
     }
 
     // Refresh system widgets (alarm, screen time) at a slower interval since they change infrequently.
-    LaunchedEffect(Unit) {
-        while (true) {
-            viewModel.refreshWidgets()
-            delay(60_000L)
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                viewModel.refreshWidgets()
+                delay(60_000L)
+            }
         }
     }
 
@@ -195,7 +219,7 @@ fun LauncherRootScreen(
     }
 
     // Observes ON_RESUME lifecycle events to check if the app currently holds the HOME role.
-    val lifecycleOwner = LocalLifecycleOwner.current
+    // (lifecycleOwner is declared once, up by the refresh loops.)
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {

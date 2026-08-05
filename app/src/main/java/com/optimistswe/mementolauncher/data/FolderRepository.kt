@@ -175,17 +175,28 @@ class FolderRepository(private val dataStore: DataStore<Preferences>) {
      *
      * @param validPackages The set of currently installed package names.
      */
-    suspend fun scrubPackages(validPackages: Set<String>) {
+    /**
+     * Removes the given packages from every folder.
+     *
+     * Removal-based rather than allow-list-based for the same reason as
+     * [FavoritesRepository.removePackages]: the old `scrubPackages(validPackages)` treated "not
+     * installed at this instant" as "delete", which permanently emptied the folders a JSON backup
+     * had just restored onto a new device before the user could reinstall their apps. Folders
+     * already render only the packages that resolve against the live app list, so stored
+     * not-yet-installed entries are harmless and self-heal on install.
+     */
+    suspend fun removePackages(removedPackages: Set<String>) {
+        if (removedPackages.isEmpty()) return
         dataStore.edit { preferences ->
             val jsonString = preferences[PreferencesKeys.FOLDERS] ?: "[]"
             val currentFolders = parseFoldersOrNull(jsonString) ?: return@edit
 
             var changed = false
             val scrubbedFolders = currentFolders.map { folder ->
-                val valid = folder.packages.filter { validPackages.contains(it) }
-                if (valid.size != folder.packages.size) {
+                val kept = folder.packages.filterNot { removedPackages.contains(it) }
+                if (kept.size != folder.packages.size) {
                     changed = true
-                    folder.copy(packages = valid)
+                    folder.copy(packages = kept)
                 } else {
                     folder
                 }

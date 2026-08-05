@@ -57,19 +57,29 @@ class AppRepository(private val context: Context) {
     }
 
     /**
-     * Observes app install/uninstall events and emits the updated app list.
+     * Observes package events and emits the updated app list, plus — when the trigger was a
+     * genuine uninstall — which package was uninstalled.
      *
-     * The Flow re-queries PackageManager whenever an app is added, removed,
-     * or replaced on the device.
+     * The removed package is taken from the ACTION_PACKAGE_REMOVED broadcast itself, not
+     * inferred by diffing app lists. The difference matters: an app also *disappears from the
+     * query* when it is disabled in system settings, mid-update, or on SD/adoptable storage
+     * that unmounts — and all of those are temporary. Only the broadcast distinguishes "gone
+     * for now" from "uninstalled", so only the broadcast may authorise deleting the user's
+     * favourites/dock/folder placements for that package. EXTRA_REPLACING filters out the
+     * REMOVED half of an app update.
      */
-    fun observeApps(): Flow<List<AppInfo>> = callbackFlow {
+    fun observeApps(): Flow<AppListUpdate> = callbackFlow {
         // Emit initial list
-        send(getInstalledApps())
+        send(AppListUpdate(getInstalledApps()))
 
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
+                val uninstalled = if (
+                    intent?.action == Intent.ACTION_PACKAGE_REMOVED &&
+                    !intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)
+                ) intent.data?.schemeSpecificPart else null
                 launch {
-                    send(getInstalledApps())
+                    send(AppListUpdate(getInstalledApps(), uninstalled))
                 }
             }
         }
@@ -78,13 +88,27 @@ class AppRepository(private val context: Context) {
             addAction(Intent.ACTION_PACKAGE_ADDED)
             addAction(Intent.ACTION_PACKAGE_REMOVED)
             addAction(Intent.ACTION_PACKAGE_REPLACED)
+            // Fired when an app (or its launcher activity) is enabled or disabled — e.g. the user
+            // disables a preinstalled app in system settings, or an app toggles its own alias
+            // components. Without it, a disabled app stayed in the drawer for the life of the
+            // process (its row tapped into nothing) and a re-enabled one never appeared. For a
+            // HOME app "the life of the process" is weeks, and there is no other re-query path.
+            addAction(Intent.ACTION_PACKAGE_CHANGED)
             addDataScheme("package")
+        }
+        // These arrive without a package: data scheme, so they need their own filter:
+        // apps on shared/adoptable storage appearing and disappearing as media mounts.
+        val storageFilter = IntentFilter().apply {
+            addAction(Intent.ACTION_EXTERNAL_APPLICATIONS_AVAILABLE)
+            addAction(Intent.ACTION_EXTERNAL_APPLICATIONS_UNAVAILABLE)
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
+            context.registerReceiver(receiver, storageFilter, Context.RECEIVER_EXPORTED)
         } else {
             context.registerReceiver(receiver, filter)
+            context.registerReceiver(receiver, storageFilter)
         }
 
         awaitClose {
@@ -104,3 +128,17 @@ class AppRepository(private val context: Context) {
         }
     }
 }
+
+/**
+ * One emission of the observed app list.
+ *
+ * @property apps every launchable app currently visible to the launcher.
+ * @property removedPackage set only when this emission was triggered by a genuine uninstall
+ *   (ACTION_PACKAGE_REMOVED without EXTRA_REPLACING). Consumers may delete stored placements
+ *   for this package and no other — packages merely absent from [apps] can be disabled,
+ *   mid-update, on unmounted storage, or part of a restored backup, and must be kept.
+ */
+data class AppListUpdate(
+    val apps: List<AppInfo>,
+    val removedPackage: String? = null
+)

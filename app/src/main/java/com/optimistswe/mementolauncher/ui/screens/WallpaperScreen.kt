@@ -1,6 +1,7 @@
 package com.optimistswe.mementolauncher.ui.screens
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -25,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -129,8 +131,17 @@ fun WallpaperScreen(
             Column(
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .fillMaxWidth()
+                    // Clearance for the MEMENTO heading, which is aligned TopCenter in the same
+                    // Box. Now that this Column fills the page height (its grid child carries
+                    // weight), its first row otherwise starts at the very top and the
+                    // "WEEK OF THE YEAR" axis label prints straight through the heading.
+                    .padding(top = 26.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                // The grid child below carries weight(), which makes this Column fill the page
+                // height; Center keeps the block visually centred (as it was when the Column was
+                // intrinsically sized) instead of packing it to the top with a gap underneath.
+                verticalArrangement = Arrangement.Center
             ) {
                 // Axis label above grid
                 Row(
@@ -149,20 +160,37 @@ fun WallpaperScreen(
 
                 Spacer(modifier = Modifier.height(6.dp))
 
-                // BoxWithConstraints self-sizes to the exact grid height so the
-                // vertical label aligns perfectly with the grid content.
+                // weight(fill = false) hands this box exactly the height left over after the axis
+                // label above and the stats block below have been measured, so the grid can be
+                // fitted to it. Previously the cell size came from the available WIDTH alone with
+                // no height term at all, and the resulting height was then silently coerced by the
+                // Column. Three things broke at once, on a stock 360x640dp phone at the default
+                // 80-year life expectancy: the grid drew 76 of 80 rows and ran off the bottom of
+                // the screen (Canvas does not clip, so the surplus painted outside its node), the
+                // "WEEK OF THE YEAR" axis label collided with the MEMENTO heading, and the Column
+                // had nothing left for the stats, so "% LIVED" and "WEEK n OF m" were measured at
+                // zero height and — since DotText draws inside a clipRect — vanished entirely.
+                // Letting Compose do the arithmetic also means this tracks the user's font scale,
+                // which a hardcoded reservation would not.
                 BoxWithConstraints(
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false)
                 ) {
                     val density = LocalDensity.current
-                    val labelWidthPx = with(density) { 28.dp.toPx() }
-                    val colSpacingPx = 1f
-                    val rowSpacingPx = 5f  // more vertical gap so rows (years) breathe
+                    // The vertical label Box below is 15.dp wide. This used to reserve 28.dp, so
+                    // the grid was measured 13dp narrower than it was actually drawn, making it
+                    // ~3.5% taller than the height reserved for it even when it nominally fit.
+                    val labelWidthPx = with(density) { VERTICAL_LABEL_WIDTH.toPx() }
+                    val rowSpacingPx = with(density) { ROW_SPACING.toPx() }
                     val columns = 52
                     val rows = metrics.lifeExpectancy
                     val availableWidthPx = constraints.maxWidth - labelWidthPx
-                    val cellSizePx = ((availableWidthPx - colSpacingPx * (columns - 1)) / columns)
-                        .coerceAtLeast(1f)
+                    val cellFromWidth = (availableWidthPx - COL_SPACING * (columns - 1)) / columns
+                    // rows is user-controlled (50..120) and independent of the screen, so the
+                    // height budget has to be able to win.
+                    val cellFromHeight = (constraints.maxHeight - rowSpacingPx * (rows - 1)) / rows
+                    val cellSizePx = minOf(cellFromWidth, cellFromHeight).coerceAtLeast(1f)
                     val gridHeightPx = cellSizePx * rows + rowSpacingPx * (rows - 1)
                     val gridHeightDp = with(density) { gridHeightPx.toDp() }
 
@@ -175,7 +203,7 @@ fun WallpaperScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxHeight()
-                                .width(15.dp),
+                                .width(VERTICAL_LABEL_WIDTH),
                             contentAlignment = Alignment.Center
                         ) {
                             DotText(
@@ -209,6 +237,10 @@ fun WallpaperScreen(
                             filledColor = onBg,
                             emptyColor = gridEmpty,
                             rowSpacing = rowSpacingPx,
+                            // Passed in rather than re-derived from the Canvas width. The draw code
+                            // used to recompute it independently, so the geometry it painted could
+                            // disagree with the geometry that was measured and reserved.
+                            cellSize = cellSizePx,
                             animatePulse = isActive,
                             modifier = Modifier
                                 .weight(1f)
@@ -258,6 +290,8 @@ private fun LifeCalendarGrid(
     metrics: CalendarMetrics,
     filledColor: Color,
     emptyColor: Color,
+    /** Edge length of one week cell, in px, already fitted to both axes by the caller. */
+    cellSize: Float,
     rowSpacing: Float = 1f,
     animatePulse: Boolean = true,
     modifier: Modifier = Modifier
@@ -275,15 +309,20 @@ private fun LifeCalendarGrid(
         // it in its own RenderNode so its display list is reused rather than re-recorded every
         // time the pulse above invalidates. Without that isolation the thousands of circles
         // below would be re-rasterised on every animation frame.
-        Canvas(modifier = Modifier.fillMaxSize().graphicsLayer()) {
-            val cellSize = cellSizeFor(size.width, columns)
+        // clipToBounds so a future measure/draw mismatch is contained instead of painting over
+        // whatever is outside this node, which is how the overflow above went unnoticed.
+        Canvas(modifier = Modifier.fillMaxSize().clipToBounds().graphicsLayer()) {
             val radius = cellSize * 0.4f
+            // When the height budget set the cell size, the grid is narrower than the canvas;
+            // centre it instead of letting it hug the left edge with dead space on the right.
+            val gridWidth = columns * cellSize + (columns - 1) * COL_SPACING
+            val startX = ((size.width - gridWidth) / 2f).coerceAtLeast(0f)
 
             var weekIndex = 0
             for (row in 0 until rows) {
                 for (col in 0 until columns) {
                     if (weekIndex == currentWeekIndex) { weekIndex++; continue }
-                    val cx = col * (cellSize + COL_SPACING) + cellSize / 2f
+                    val cx = startX + col * (cellSize + COL_SPACING) + cellSize / 2f
                     val cy = row * (cellSize + rowSpacing) + cellSize / 2f
                     if (weekIndex < weeksLived) {
                         drawCircle(color = filledColor, radius = radius, center = Offset(cx, cy))
@@ -301,6 +340,7 @@ private fun LifeCalendarGrid(
             CurrentWeekPulse(
                 currentWeekIndex = currentWeekIndex,
                 columns = columns,
+                cellSize = cellSize,
                 rowSpacing = rowSpacing,
                 animate = animatePulse,
                 modifier = Modifier.fillMaxSize()
@@ -311,8 +351,15 @@ private fun LifeCalendarGrid(
 
 private const val COL_SPACING = 1f
 
-private fun cellSizeFor(availableWidth: Float, columns: Int): Float =
-    ((availableWidth - (columns - 1) * COL_SPACING) / columns).coerceAtLeast(1f)
+/** Width of the rotated "YEAR OF YOUR LIFE" label column, reserved by the height maths. */
+private val VERTICAL_LABEL_WIDTH = 15.dp
+
+/**
+ * Vertical gap between year rows. Expressed in dp, not raw pixels: as a bare `5f` the gap was a
+ * fixed number of *physical* pixels, so the grid's total height silently changed with screen
+ * density instead of staying visually constant.
+ */
+private val ROW_SPACING = 2.dp
 
 /**
  * The pulsing "you are here" dot.
@@ -328,6 +375,7 @@ private fun cellSizeFor(availableWidth: Float, columns: Int): Float =
 private fun CurrentWeekPulse(
     currentWeekIndex: Int,
     columns: Int,
+    cellSize: Float,
     rowSpacing: Float,
     animate: Boolean,
     modifier: Modifier = Modifier
@@ -362,10 +410,11 @@ private fun CurrentWeekPulse(
         pulseAlpha = 0f
     }
 
-    Canvas(modifier = modifier) {
-        val cellSize = cellSizeFor(size.width, columns)
+    Canvas(modifier = modifier.clipToBounds()) {
         val radius = cellSize * 0.4f
-        val cx = (currentWeekIndex % columns) * (cellSize + COL_SPACING) + cellSize / 2f
+        val gridWidth = columns * cellSize + (columns - 1) * COL_SPACING
+        val startX = ((size.width - gridWidth) / 2f).coerceAtLeast(0f)
+        val cx = startX + (currentWeekIndex % columns) * (cellSize + COL_SPACING) + cellSize / 2f
         val cy = (currentWeekIndex / columns) * (cellSize + rowSpacing) + cellSize / 2f
         val currentWeekColor = Color(0xFF228B22)
 

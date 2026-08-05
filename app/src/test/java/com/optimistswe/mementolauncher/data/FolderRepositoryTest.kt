@@ -124,13 +124,13 @@ class FolderRepositoryTest {
     }
 
     @Test
-    fun `scrubPackages removes uninstalled apps`() = runTest(testDispatcher) {
+    fun `removePackages removes exactly the uninstalled apps`() = runTest(testDispatcher) {
         repository.createFolder("Tools")
         val folderId = repository.folders.first()[0].id
         repository.addAppToFolder(folderId, "pkg.installed")
         repository.addAppToFolder(folderId, "pkg.uninstalled")
 
-        repository.scrubPackages(setOf("pkg.installed"))
+        repository.removePackages(setOf("pkg.uninstalled"))
 
         val folders = repository.folders.first()
         assertEquals(listOf("pkg.installed"), folders[0].packages)
@@ -205,26 +205,28 @@ class FolderRepositoryTest {
     }
 
     @Test
-    fun `scrubPackages with empty valid set removes all packages`() = runTest(testDispatcher) {
+    fun `removePackages with an empty set changes nothing`() = runTest(testDispatcher) {
         repository.createFolder("Tools")
         val folderId = repository.folders.first()[0].id
         repository.addAppToFolder(folderId, "pkg.a")
         repository.addAppToFolder(folderId, "pkg.b")
 
-        repository.scrubPackages(emptySet())
+        repository.removePackages(emptySet())
 
         val folders = repository.folders.first()
-        assertTrue(folders[0].packages.isEmpty())
+        assertEquals(2, folders[0].packages.size)
     }
 
     @Test
-    fun `scrubPackages when all packages are valid changes nothing`() = runTest(testDispatcher) {
+    fun `removePackages keeps folder entries for apps that are merely not installed`() = runTest(testDispatcher) {
+        // The restored-backup case: folder contents restored onto a device where the apps are
+        // not installed yet must survive removals that do not name them.
         repository.createFolder("Tools")
         val folderId = repository.folders.first()[0].id
-        repository.addAppToFolder(folderId, "pkg.a")
-        repository.addAppToFolder(folderId, "pkg.b")
+        repository.addAppToFolder(folderId, "pkg.restored.a")
+        repository.addAppToFolder(folderId, "pkg.restored.b")
 
-        repository.scrubPackages(setOf("pkg.a", "pkg.b"))
+        repository.removePackages(setOf("pkg.something.else"))
 
         val folders = repository.folders.first()
         assertEquals(2, folders[0].packages.size)
