@@ -63,6 +63,16 @@ android {
             }
             isMinifyEnabled = true
             isShrinkResources = true
+            // The bundle's only native code is third-party: androidx.graphics.path (Compose)
+            // and DataStore's shared-counter lib. Play Console warns that no debug symbols were
+            // uploaded for them — that warning is UNAVOIDABLE here and safe to ignore: AndroidX
+            // publishes those .so files pre-stripped and does not ship symbols, so
+            // mergeReleaseNativeDebugMetadata runs NO-SOURCE (verified). This setting is kept so
+            // that if any future dependency (or our own NDK code) ships unstripped natives,
+            // their symbol tables are packaged into the bundle automatically.
+            ndk {
+                debugSymbolLevel = "SYMBOL_TABLE"
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
