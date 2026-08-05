@@ -53,6 +53,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Matches LauncherActivity so setup and the launcher itself behave the same way.
+        applyOrientationLock()
         enableEdgeToEdge()
 
         // Screen dimensions for wallpaper generation. defaultDisplay is deprecated from API 30;

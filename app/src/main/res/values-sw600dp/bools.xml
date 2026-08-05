@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Large screens (>= 600dp smallest width): tablets and unfolded foldables keep free
+        rotation. They have enough height for the life calendar grid in landscape, and the
+        launcher's content is capped at CONTENT_MAX_WIDTH and centred, so the wide layout is
+        deliberate rather than stretched. See values/bools.xml for why handsets are locked.
+    -->
+    <bool name="lock_portrait">false</bool>
+</resources>

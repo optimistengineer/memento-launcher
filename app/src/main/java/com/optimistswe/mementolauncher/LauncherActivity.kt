@@ -29,6 +29,13 @@ class LauncherActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Portrait-only on handsets, free rotation on large screens. Set here rather than in the
+        // manifest because android:screenOrientation takes a literal enum and cannot be varied by
+        // resource qualifier, and the phone/tablet split is the whole point — see res/values/
+        // bools.xml. A side benefit: with rotation gone on phones, the Activity is no longer
+        // recreated by turning the device, so nothing transient is lost that way either.
+        applyOrientationLock()
         // Prevent Android from taking a visual snapshot of the launcher for Recents
         // window.setFlags(
         //     android.view.WindowManager.LayoutParams.FLAG_SECURE,

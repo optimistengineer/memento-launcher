@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Lock the launcher to portrait on handsets.
+
+        The life calendar is a 52-column x 50..120-row grid of square cells, so its natural shape
+        is tall. Rotating a phone leaves roughly 218dp of usable height for 80 rows, which fits
+        only by shrinking each week to a few pixels — the page stayed correct but became an
+        unreadable strip. There is no landscape use case for a minimalist home screen that
+        justifies that, so handsets simply do not rotate.
+
+        Overridden to false in values-sw600dp: tablets and unfolded foldables have the height to
+        render the grid properly in landscape, their content is already centred within
+        CONTENT_MAX_WIDTH, and Play's large-screen guidance is against locking orientation there.
+    -->
+    <bool name="lock_portrait">true</bool>
+</resources>
