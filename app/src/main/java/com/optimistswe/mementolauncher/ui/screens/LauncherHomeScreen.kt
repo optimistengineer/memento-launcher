@@ -6,12 +6,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.IconButton
@@ -37,6 +39,21 @@ import com.optimistswe.mementolauncher.ui.components.DotIcon
 import com.optimistswe.mementolauncher.ui.components.DotIconType
 import com.optimistswe.mementolauncher.ui.components.AutoScaledDotText
 import com.optimistswe.mementolauncher.ui.components.DotText
+
+/**
+ * Widest the home screen's content is allowed to get. Phones are all narrower than this, so it
+ * only takes effect on tablets and unfolded foldables, where filling the width looked broken
+ * rather than spacious.
+ */
+private val CONTENT_MAX_WIDTH = 560.dp
+
+/**
+ * Height set aside above the swipe hint so the flowed content never reaches the dock corner icons,
+ * which are anchored to the bottom of the screen outside this Column's flow. A dock icon is 44dp
+ * tall and sits 56dp up from the bottom, so it occupies 56–100dp; the swipe hint and the Column's
+ * own 24dp bottom padding account for ~34dp of that, and this covers the rest with clearance.
+ */
+private val DOCK_RESERVED_HEIGHT = 76.dp
 
 /**
  * The default home screen of the Memento launcher.
@@ -95,10 +112,36 @@ fun LauncherHomeScreen(
                 )
             }
     ) {
+      // Caps the content measure and centres it. Left to fill the screen, a 1067dp tablet put the
+      // clock hard against the left edge with two thirds of the screen empty, and threw the two
+      // dock icons into opposite corners about a metre apart on a 10" panel. Below 560dp — every
+      // phone — this is a no-op, so phone layout is untouched.
+      BoxWithConstraints(
+          modifier = Modifier
+              .align(Alignment.Center)
+              .widthIn(max = CONTENT_MAX_WIDTH)
+              .fillMaxSize()
+      ) {
+        // A landscape phone leaves only ~370dp of usable height once the system bars are taken
+        // out. The portrait rhythm — 48dp of top padding, a 48dp-tall clock, 14dp above and below
+        // every favourite — needs more than that once the dock band is reserved, and the overflow
+        // came off the bottom: the swipe hint, the only signpost that other pages exist, simply
+        // stopped being drawn. Compress the rhythm instead of dropping content.
+        val compact = maxHeight < 520.dp
+        val clockDotSize = if (compact) 6.dp else 8.dp
+        val clockSpacing = if (compact) 1.5.dp else 2.dp
+        val clockToDateGap = if (compact) 10.dp else 22.dp
+        val favoriteRowPadding = if (compact) 8.dp else 14.dp
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = 48.dp, bottom = 24.dp, start = 32.dp, end = 32.dp)
+                .padding(
+                    top = if (compact) 20.dp else 48.dp,
+                    bottom = 24.dp,
+                    start = 32.dp,
+                    end = 32.dp
+                )
         ) {
             // CLOCK
             // AutoScaledDotText, not DotText: at dotSize 8.dp the 12-hour ("04:22 PM", 378dp)
@@ -109,15 +152,15 @@ fun LauncherHomeScreen(
             AutoScaledDotText(
                 text = currentTime,
                 color = onBg,
-                baseDotSize = 8.dp,
-                baseSpacing = 2.dp,
+                baseDotSize = clockDotSize,
+                baseSpacing = clockSpacing,
                 alignment = Alignment.Start
             )
 
             // The clock stands ~126px tall, so a 12dp gap left the date crowded against it —
             // it read as an orphaned fragment rather than a second line. Roughly a third of
             // the clock's height gives the pair room to read as one block.
-            Spacer(modifier = Modifier.height(22.dp))
+            Spacer(modifier = Modifier.height(clockToDateGap))
 
             // DATE
             DotText(
@@ -169,27 +212,43 @@ fun LauncherHomeScreen(
                                 onClick = { onLaunchApp(app.packageName) },
                                 onLongClick = { pendingRemoval = app }
                             )
-                            .padding(vertical = 14.dp)
+                            .padding(vertical = favoriteRowPadding)
                     ) {
-                        DotText(
+                        // App labels are unbounded user data — "GOOGLE PLAY SERVICES" needs
+                        // 374dp at LARGE font scale against 296dp of usable width on a 360dp
+                        // phone. Auto-scaling costs nothing for the short labels that already fit.
+                        AutoScaledDotText(
                             text = app.label.uppercase(),
                             color = onBg,
-                            dotSize = 2.5.dp,
-                            spacing = 0.8.dp
+                            baseDotSize = 2.5.dp,
+                            baseSpacing = 0.8.dp,
+                            alignment = Alignment.Start
                         )
                     }
                 }
             } else {
-                DotText(
+                // 333dp at LARGE scale versus 296dp usable on a 360dp phone: the one instruction
+                // a first-run user gets was the thing that overflowed.
+                AutoScaledDotText(
                     text = "SWIPE RIGHT TO ADD APPS",
                     color = faint,
-                    dotSize = 2.dp,
-                    spacing = 0.7.dp
+                    baseDotSize = 2.dp,
+                    baseSpacing = 0.7.dp,
+                    alignment = Alignment.Start
                 )
             }
 
             // Push bottom content down
             Spacer(modifier = Modifier.weight(1f))
+
+            // Reserve the band the dock corner icons occupy. They are aligned to the *outer* Box's
+            // bottom, so they are not part of this Column's flow and nothing stopped the two from
+            // sharing pixels: in landscape, where there is only ~411dp of height, the weight
+            // spacers above and below the favourites collapse and the last favourite was drawn
+            // underneath the bottom-left dock icon.
+            if (dockLeftApp != null || dockRightApp != null) {
+                Spacer(modifier = Modifier.height(DOCK_RESERVED_HEIGHT))
+            }
 
             // SWIPE HINT
             Box(modifier = Modifier.fillMaxWidth()) {
@@ -229,6 +288,7 @@ fun LauncherHomeScreen(
                     .padding(end = 24.dp, bottom = 56.dp)
             )
         }
+      }
     }
 
     pendingRemoval?.let { app ->
@@ -262,11 +322,13 @@ private fun ConfirmRemoveFavourite(
                 .padding(24.dp)
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
-                DotText(
+                // 292dp at LARGE scale, against 0.9 × 320dp − 48dp = 240dp inside this dialog.
+                AutoScaledDotText(
                     text = "REMOVE FROM HOME?",
                     color = onBg,
-                    dotSize = 2.2.dp,
-                    spacing = 0.7.dp
+                    baseDotSize = 2.2.dp,
+                    baseSpacing = 0.7.dp,
+                    alignment = Alignment.Start
                 )
                 AutoScaledDotText(
                     text = appLabel.uppercase(),

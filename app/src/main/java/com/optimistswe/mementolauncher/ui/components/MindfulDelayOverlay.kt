@@ -88,21 +88,25 @@ fun MindfulDelayOverlay(
             // Optical top balance
             Spacer(modifier = Modifier.weight(1.2f))
 
-            DotText(
+            // The message is typed by the user in settings, so its length is unbounded — even the
+            // shipped default ("IS THIS / INTENTIONAL?") needs 323dp at LARGE font scale against
+            // 296dp of usable width on a 360dp phone.
+            AutoScaledDotText(
                 text = displayMessage,
                 color = onBg,
-                dotSize = 3.5.dp, // Slightly larger for emphasis
-                spacing = 1.2.dp,
+                baseDotSize = 3.5.dp, // Slightly larger for emphasis
+                baseSpacing = 1.2.dp,
                 alignment = Alignment.CenterHorizontally
             )
 
             if (appName != null) {
                 Spacer(modifier = Modifier.height(24.dp))
-                DotText(
+                AutoScaledDotText(
                     text = "OPENING ${appName.uppercase()}",
                     color = dimmed,
-                    dotSize = 1.2.dp,
-                    spacing = 0.5.dp
+                    baseDotSize = 1.2.dp,
+                    baseSpacing = 0.5.dp,
+                    alignment = Alignment.CenterHorizontally
                 )
             }
 

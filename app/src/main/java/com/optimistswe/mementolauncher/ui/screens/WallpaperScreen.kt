@@ -34,6 +34,7 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.optimistswe.mementolauncher.domain.CalendarMetrics
+import com.optimistswe.mementolauncher.ui.components.AutoScaledDotText
 import com.optimistswe.mementolauncher.ui.components.DotText
 
 /**
@@ -89,11 +90,16 @@ fun WallpaperScreen(
                     .clickable { onOpenSettings() }
                     .padding(16.dp)
             ) {
-                DotText(
-                    text = "SET YOUR BIRTH DATE",
+                // Set on two lines and auto-scaled. On one line this needed 336dp of dot-matrix
+                // at the default font scale, but the hint's own paddings leave only ~240dp on a
+                // 360dp phone — so the first thing a new user saw on this page was
+                // "SET YOUR BIRTH DAT" running off the screen edge.
+                AutoScaledDotText(
+                    text = "SET YOUR\nBIRTH DATE",
                     color = dimmed,
-                    dotSize = 3.dp,
-                    spacing = 1.dp
+                    baseDotSize = 3.dp,
+                    baseSpacing = 1.dp,
+                    alignment = Alignment.CenterHorizontally
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 DotText(

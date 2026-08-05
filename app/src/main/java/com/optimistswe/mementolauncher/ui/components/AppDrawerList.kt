@@ -164,11 +164,16 @@ fun AppDrawerList(
                                             horizontalArrangement = Arrangement.SpaceBetween,
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            DotText(
+                                            // weight, not fillMaxWidth: this Row lays the name out
+                                            // against the +/- indicator, so the name has to yield
+                                            // that space rather than scale into it.
+                                            AutoScaledDotText(
                                                 text = folder.name,
                                                 color = dimmed,
-                                                dotSize = 3.dp,
-                                                spacing = 1.dp
+                                                modifier = Modifier.weight(1f),
+                                                baseDotSize = 3.dp,
+                                                baseSpacing = 1.dp,
+                                                alignment = Alignment.Start
                                             )
                                             DotText(
                                                 text = if (effectiveCollapsedFolders.contains(folder.id)) "+" else "-",
@@ -339,11 +344,13 @@ private fun AppListItem(
             )
             .padding(vertical = 18.dp, horizontal = 8.dp)
     ) {
-        DotText(
+        // Unbounded user data: long labels overflowed the row and painted over their neighbours.
+        AutoScaledDotText(
             text = app.label.uppercase(),
             color = if (isFav) onBg else onBg.copy(alpha = 0.7f),
-            dotSize = 2.5.dp,
-            spacing = 0.8.dp
+            baseDotSize = 2.5.dp,
+            baseSpacing = 0.8.dp,
+            alignment = Alignment.Start
         )
     }
 }

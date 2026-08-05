@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
@@ -63,48 +64,58 @@ fun DotText(
         val dotPx = scaledDotSize.toPx()
         val spacePx = scaledSpacing.toPx()
         val radius = dotPx / 2f
-        
-        var currentY = 0f
-        
-        layout.lines.forEach { line ->
-            // Handle horizontal alignment within the Canvas
-            var currentX = when (alignment) {
-                Alignment.CenterHorizontally -> (size.width - line.width.toPx()) / 2f
-                Alignment.End -> size.width - line.width.toPx()
-                else -> 0f
-            }
 
-            line.chars.forEach { charItem ->
-                if (charItem.char == ' ') {
-                    currentX += (dotPx * 2) + dotPx * 1.5f // Match spacing between chars
-                } else {
-                    val pattern = charItem.pattern
-                    val charRows = pattern.size
-                    val charCols = pattern[0].length
+        // `size(layout.width, ...)` is coerced by the parent's constraints, so when the text is
+        // wider than the space it was given the node ends up narrower than the glyphs it is about
+        // to draw. DrawScope does not clip, so those glyphs used to paint straight over whatever
+        // sat outside this node — including, for a HorizontalPager page, the *neighbouring page*:
+        // the calendar page's "SET YOUR BIRTH DATE" hint overflowed on any screen under ~410dp
+        // and left its final "E" stranded in the home screen's left gutter.
+        // A draw-time clipRect keeps overflow local without the extra render layer that
+        // Modifier.clipToBounds() (a graphicsLayer) would add to every DotText in a long list.
+        clipRect {
+            var currentY = 0f
 
-                    // Sit every glyph on a shared baseline. Laying out from the top of the line
-                    // instead makes any glyph shorter than the tallest one float, and any taller
-                    // one hang below its neighbours. The font is uniformly 5 rows today, so this
-                    // is normally zero — it keeps mixed-height glyphs correct if any are added.
-                    val baselineOffset = (line.maxRows - charRows) * (dotPx + spacePx)
+            layout.lines.forEach { line ->
+                // Handle horizontal alignment within the Canvas
+                var currentX = when (alignment) {
+                    Alignment.CenterHorizontally -> (size.width - line.width.toPx()) / 2f
+                    Alignment.End -> size.width - line.width.toPx()
+                    else -> 0f
+                }
 
-                    for (r in 0 until charRows) {
-                        for (c in 0 until charCols) {
-                            if (pattern[r][c] == 'X') {
-                                val x = currentX + c * (dotPx + spacePx) + radius
-                                val y = currentY + baselineOffset + r * (dotPx + spacePx) + radius
-                                drawCircle(
-                                    color = color,
-                                    radius = radius,
-                                    center = Offset(x, y)
-                                )
+                line.chars.forEach { charItem ->
+                    if (charItem.char == ' ') {
+                        currentX += (dotPx * 2) + dotPx * 1.5f // Match spacing between chars
+                    } else {
+                        val pattern = charItem.pattern
+                        val charRows = pattern.size
+                        val charCols = pattern[0].length
+
+                        // Sit every glyph on a shared baseline. Laying out from the top of the line
+                        // instead makes any glyph shorter than the tallest one float, and any taller
+                        // one hang below its neighbours. The font is uniformly 5 rows today, so this
+                        // is normally zero — it keeps mixed-height glyphs correct if any are added.
+                        val baselineOffset = (line.maxRows - charRows) * (dotPx + spacePx)
+
+                        for (r in 0 until charRows) {
+                            for (c in 0 until charCols) {
+                                if (pattern[r][c] == 'X') {
+                                    val x = currentX + c * (dotPx + spacePx) + radius
+                                    val y = currentY + baselineOffset + r * (dotPx + spacePx) + radius
+                                    drawCircle(
+                                        color = color,
+                                        radius = radius,
+                                        center = Offset(x, y)
+                                    )
+                                }
                             }
                         }
+                        currentX += (charCols * dotPx) + ((charCols - 1).coerceAtLeast(0) * spacePx) + dotPx * 1.5f
                     }
-                    currentX += (charCols * dotPx) + ((charCols - 1).coerceAtLeast(0) * spacePx) + dotPx * 1.5f
                 }
+                currentY += line.height.toPx() + (dotPx * 2) // Line spacing
             }
-            currentY += line.height.toPx() + (dotPx * 2) // Line spacing
         }
     }
 }
@@ -161,13 +172,13 @@ fun AutoScaledDotText(
     }
 }
 
-private data class TextLayout(
+internal data class TextLayout(
     val width: Dp,
     val height: Dp,
     val lines: List<LineLayout>
 )
 
-private data class LineLayout(
+internal data class LineLayout(
     val width: Dp,
     val height: Dp,
     /** Tallest glyph on the line, in dot rows. Used to sit every glyph on a shared baseline. */
@@ -175,12 +186,12 @@ private data class LineLayout(
     val chars: List<CharLayout>
 )
 
-private data class CharLayout(
+internal data class CharLayout(
     val char: Char,
     val pattern: List<String>
 )
 
-private fun calculateLayout(text: String, dotSize: Dp, spacing: Dp): TextLayout {
+internal fun calculateLayout(text: String, dotSize: Dp, spacing: Dp): TextLayout {
     val lines = text.split("\n")
     val lineLayouts = lines.map { line ->
         var lineWidth = 0.dp
