@@ -216,7 +216,7 @@ private fun calculateLayout(text: String, dotSize: Dp, spacing: Dp): TextLayout 
     return TextLayout(totalWidth, totalHeight, lineLayouts)
 }
 
-private fun getPattern(char: Char): List<String> {
+internal fun getPattern(char: Char): List<String> {
     return when (char.uppercaseChar()) {
         // Digits are 5 rows to match the letters' cap height. They used to be 6, and because
         // glyphs are laid out from the top of the line, every digit dropped one dot-row below

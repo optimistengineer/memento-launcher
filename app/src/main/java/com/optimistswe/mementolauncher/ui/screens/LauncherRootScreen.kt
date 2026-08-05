@@ -115,6 +115,10 @@ fun LauncherRootScreen(
     // initialPage on first composition only, so composing it against the null-preferences
     // default and then flipping pageCount would silently land the user on the wrong page.
     val loadedPreferences = preferences ?: run {
+        // Consume back during the cold-start window too. LauncherActivity no longer overrides
+        // onBackPressed(), so without this, back while DataStore does its first read reaches the
+        // dispatcher's fallback and finishes the HOME activity — a visible flash and relaunch.
+        BackHandler(enabled = true) {}
         Box(modifier = Modifier.fillMaxSize().background(Color.Black))
         return
     }
@@ -123,10 +127,16 @@ fun LauncherRootScreen(
     val homePage = if (showCalendar) 1 else 0
     val drawerPage = homePage + 1
 
-    val pagerState = rememberPagerState(
-        initialPage = homePage,
-        pageCount = { if (showCalendar) 3 else 2 }
-    )
+    // Keyed on showCalendar: rememberPagerState only consumes initialPage on creation, but adding
+    // or removing the calendar page renumbers every index. Without re-creating the state, closing
+    // settings after enabling the calendar silently moved the user from the app drawer to Home
+    // (currentPage 1 meant "drawer" before and "home" after).
+    val pagerState = key(showCalendar) {
+        rememberPagerState(
+            initialPage = homePage,
+            pageCount = { if (showCalendar) 3 else 2 }
+        )
+    }
 
     // Ensures that search is cleared whenever the user navigates away from the app drawer.
     LaunchedEffect(pagerState) {
@@ -203,6 +213,8 @@ fun LauncherRootScreen(
 
     MementoTheme(darkTheme = isDark) {
         if (!isDefaultLauncher) {
+            // Same reason as the cold-start branch: this returns before the main BackHandler.
+            BackHandler(enabled = true) {}
             DefaultLauncherScreen(
                 onDismiss = { isDefaultLauncher = true }
             )
@@ -230,7 +242,12 @@ fun LauncherRootScreen(
                 val keyboardController = LocalSoftwareKeyboardController.current
                 val focusManager = LocalFocusManager.current
 
-                LaunchedEffect(viewModel) {
+                // Keyed on homePage as well as viewModel. viewModel never changes for the life of
+                // the activity, so a collector started once kept the homePage value from the FIRST
+                // composition — after the calendar was toggled, the HOME button then scrolled to a
+                // stale index (or, when the stale index happened to equal currentPage, did nothing
+                // at all) for as long as the activity lived, which for a HOME app is days.
+                LaunchedEffect(viewModel, homePage) {
                     viewModel.homeIntentEvents.collect {
                         if (showSettingsDialog) {
                             showSettingsDialog = false

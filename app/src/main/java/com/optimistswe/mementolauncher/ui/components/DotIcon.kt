@@ -47,6 +47,12 @@ enum class DotIconType {
     GAME,
     SEARCH,
     SOCIAL,
+    /**
+     * A settings gear sized for app icons. Distinct from [SETTINGS], which is a 25x25 pattern
+     * drawn at 0.8.dp for the app drawer's gear button — at the dock's 2.5.dp that pattern would
+     * measure 74.5dp inside a 44dp circle and render as a cropped fragment.
+     */
+    GEAR,
     APP
 }
 
@@ -67,7 +73,8 @@ fun dotIconForPackage(packageName: String): DotIconType? {
         p.contains("whatsapp") || p.contains("telegram") || p.contains("signal") ||
             p.contains("messenger") || p.contains("discord") || p.contains("slack") -> DotIconType.CHAT
         p.contains("messaging") || p.contains("mms") || p.contains(".sms") -> DotIconType.MESSAGE
-        p.contains("gm") && p.contains("mail") || p.contains("gmail") || p.contains("outlook") ||
+        // "android.gm" catches Gmail, whose package (com.google.android.gm) contains no "mail".
+        p.contains("android.gm") || p.contains("gmail") || p.contains("outlook") ||
             p.contains("mail") || p.contains("proton") -> DotIconType.MAIL
 
         // Media
@@ -113,7 +120,7 @@ fun dotIconForPackage(packageName: String): DotIconType? {
             p.contains("wattpad") -> DotIconType.BOOK
         p.contains("game") || p.contains("play.games") || p.contains("steam") -> DotIconType.GAME
         p.contains("googlequicksearchbox") || p.contains("search") -> DotIconType.SEARCH
-        p.contains("settings") -> DotIconType.SETTINGS
+        p.contains("settings") -> DotIconType.GEAR
         else -> null
     }
 }
@@ -175,7 +182,7 @@ fun DotIcon(
     }
 }
 
-private fun getIconPattern(type: DotIconType): List<String> {
+internal fun getIconPattern(type: DotIconType): List<String> {
     return when (type) {
         DotIconType.EDIT -> listOf(
             "....XX.",
@@ -310,22 +317,28 @@ private fun getIconPattern(type: DotIconType): List<String> {
             "XXXXXXXXX"
         )
 
+        // 9x9 to match the rest of the app-icon set.
         DotIconType.GLOBE -> listOf(
-            "..XXX..",
-            ".X.X.X.",
-            "XXXXXXX",
-            "X.X.X.X",
-            "XXXXXXX",
-            ".X.X.X.",
-            "..XXX.."
+            "..XXXXX..",
+            ".X..X..X.",
+            "X...X...X",
+            "XXXXXXXXX",
+            "X...X...X",
+            "XXXXXXXXX",
+            "X...X...X",
+            ".X..X..X.",
+            "..XXXXX.."
         )
         DotIconType.CALENDAR -> listOf(
-            "X.X.X.X",
-            "XXXXXXX",
-            "X.....X",
-            "X.X.X.X",
-            "X.....X",
-            "XXXXXXX"
+            "..X...X..",
+            "XXXXXXXXX",
+            "XXXXXXXXX",
+            "X.......X",
+            "X.X.X.X.X",
+            "X.......X",
+            "X.X.X...X",
+            "X.......X",
+            "XXXXXXXXX"
         )
 
         // ═══════════════════════════════════════════
@@ -551,6 +564,19 @@ private fun getIconPattern(type: DotIconType): List<String> {
             "X.......X",
             "X.......X",
             "........."
+        )
+
+        // Settings gear, sized for app icons
+        DotIconType.GEAR -> listOf(
+            "...XXX...",
+            ".X.XXX.X.",
+            ".XXXXXXX.",
+            "XXXX.XXXX",
+            "XXX...XXX",
+            "XXXX.XXXX",
+            ".XXXXXXX.",
+            ".X.XXX.X.",
+            "...XXX..."
         )
 
         // Generic app: rounded square, the neutral fallback

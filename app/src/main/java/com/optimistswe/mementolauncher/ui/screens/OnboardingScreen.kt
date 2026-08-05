@@ -23,6 +23,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,9 +67,15 @@ fun OnboardingScreen(
     val dimmed = onBg.copy(alpha = 0.55f)
     val faint = onBg.copy(alpha = 0.30f)
 
-    var step by remember { mutableIntStateOf(0) }
-    var birthDate by remember { mutableStateOf<LocalDate?>(null) }
-    var showDatePicker by remember { mutableStateOf(false) }
+    // rememberSaveable, not remember: MainActivity declares no configChanges, so it is recreated
+    // on rotation, a foldable unfold, a system font-size change or a light/dark switch. With plain
+    // remember, a user who had reached the last step — or picked a birth date — was thrown back to
+    // WELCOME with the date silently gone. That cost nothing before this flow collected input;
+    // now it does. LocalDate is not Saveable, so the epoch day is stored instead.
+    var step by rememberSaveable { mutableIntStateOf(0) }
+    var birthDateEpochDay by rememberSaveable { mutableStateOf<Long?>(null) }
+    val birthDate: LocalDate? = birthDateEpochDay?.let { LocalDate.ofEpochDay(it) }
+    var showDatePicker by rememberSaveable { mutableStateOf(false) }
 
     val defaults = { onComplete(birthDate, LifeCalendarCalculator.DEFAULT_LIFE_EXPECTANCY, true) }
 
@@ -168,7 +175,7 @@ fun OnboardingScreen(
         DottedDatePickerDialog(
             initialDate = birthDate,
             onDateSelected = {
-                birthDate = it
+                birthDateEpochDay = it.toEpochDay()
                 showDatePicker = false
             },
             onDismiss = { showDatePicker = false }
