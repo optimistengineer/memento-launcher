@@ -41,11 +41,12 @@ import com.optimistswe.mementolauncher.ui.components.AutoScaledDotText
 import com.optimistswe.mementolauncher.ui.components.DotText
 
 /**
- * Widest the home screen's content is allowed to get. Phones are all narrower than this, so it
- * only takes effect on tablets and unfolded foldables, where filling the width looked broken
- * rather than spacious.
+ * Widest the launcher's content is allowed to get, shared by the home screen and the app drawer so
+ * the two agree when the user swipes between them. Phones are all narrower than this, so it only
+ * takes effect on tablets and unfolded foldables, where filling the width looked broken rather
+ * than spacious.
  */
-private val CONTENT_MAX_WIDTH = 560.dp
+internal val CONTENT_MAX_WIDTH = 560.dp
 
 /**
  * Height set aside above the swipe hint so the flowed content never reaches the dock corner icons,

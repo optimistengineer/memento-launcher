@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -135,8 +136,13 @@ fun AppDrawerScreen(
         }
     }
 
+    // Matches the home screen's content cap so swiping between the two pages does not jump between
+    // a centred column and a full-width one. On a 1067dp tablet the app list otherwise hugged the
+    // far left with two thirds of the row empty.
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
     Column(
         modifier = Modifier
+            .widthIn(max = CONTENT_MAX_WIDTH)
             .fillMaxSize()
             .background(Color.Transparent)
             .imePadding()
@@ -228,5 +234,6 @@ fun AppDrawerScreen(
             Spacer(modifier = Modifier.height(16.dp))
             searchBar(searchQuery)
         }
+    }
     }
 }
