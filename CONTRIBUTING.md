@@ -19,7 +19,7 @@ cd memento
 ## Project Structure
 
 ```
-app/src/main/java/com/optimistswe/mementolauncher/
+app/src/main/java/com/betteruniverse/mementolauncher/
 ├── data/          # Repositories, DataStore persistence
 ├── domain/        # Pure business logic (life calendar calculations)
 ├── generator/     # Canvas-based wallpaper image generation

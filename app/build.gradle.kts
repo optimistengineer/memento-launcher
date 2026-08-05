@@ -28,11 +28,11 @@ val releaseStoreFile = signingValue("storeFile", "MEMENTO_STORE_FILE")
 val hasReleaseSigning = releaseStoreFile != null && file(releaseStoreFile).exists()
 
 android {
-    namespace = "com.optimistswe.mementolauncher"
+    namespace = "com.betteruniverse.mementolauncher"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.optimistswe.mementolauncher"
+        applicationId = "com.betteruniverse.mementolauncher"
         minSdk = 26
         targetSdk = 36
         versionCode = 1

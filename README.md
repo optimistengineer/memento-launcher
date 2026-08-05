@@ -75,7 +75,7 @@ cd memento
 
 ## Architecture
 
-MVVM with Jetpack Compose. Three layers under `app/src/main/java/com/optimistswe/mementolauncher/`:
+MVVM with Jetpack Compose. Three layers under `app/src/main/java/com/betteruniverse/mementolauncher/`:
 
 ```
 data/          Repositories backed by DataStore (preferences, favorites, labels, folders)
