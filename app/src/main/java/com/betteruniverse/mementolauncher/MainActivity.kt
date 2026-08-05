@@ -1,0 +1,180 @@
+package com.betteruniverse.mementolauncher
+
+import android.os.Bundle
+import android.util.DisplayMetrics
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import com.betteruniverse.mementolauncher.data.PreferencesRepository
+import com.betteruniverse.mementolauncher.ui.MainViewModel
+import com.betteruniverse.mementolauncher.ui.navigation.Screen
+import com.betteruniverse.mementolauncher.ui.screens.HomeScreen
+import com.betteruniverse.mementolauncher.ui.screens.OnboardingScreen
+import com.betteruniverse.mementolauncher.ui.screens.SettingsScreen
+import com.betteruniverse.mementolauncher.ui.theme.MementoTheme
+import com.betteruniverse.mementolauncher.wallpaper.WallpaperUpdater
+import com.betteruniverse.mementolauncher.worker.WallpaperUpdateWorker
+import android.app.Activity
+import android.content.Intent
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalContext
+import com.betteruniverse.mementolauncher.data.CalendarTheme
+import com.betteruniverse.mementolauncher.ui.components.LocalFontScale
+
+/**
+ * Main entry point for the Memento app.
+ *
+ * Sets up:
+ * - Edge-to-edge display
+ * - Jetpack Compose theming
+ * - Navigation between screens
+ * - ViewModel with dependencies
+ */
+import dagger.hilt.android.AndroidEntryPoint
+
+/**
+ * Main entry point for the Memento app.
+ *
+ * Sets up:
+ * - Edge-to-edge display
+ * - Jetpack Compose theming
+ * - Navigation between screens
+ * - ViewModel with dependencies
+ */
+@AndroidEntryPoint
+class MainActivity : ComponentActivity() {
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // Matches LauncherActivity so setup and the launcher itself behave the same way.
+        applyOrientationLock()
+        enableEdgeToEdge()
+
+        // Screen dimensions for wallpaper generation. defaultDisplay is deprecated from API 30;
+        // WindowMetrics is the supported replacement.
+        val (screenWidth, screenHeight) =
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                val bounds = windowManager.maximumWindowMetrics.bounds
+                bounds.width() to bounds.height()
+            } else {
+                val metrics = DisplayMetrics()
+                @Suppress("DEPRECATION")
+                windowManager.defaultDisplay.getRealMetrics(metrics)
+                metrics.widthPixels to metrics.heightPixels
+            }
+
+        setContent {
+            MementoApp(
+                screenWidth = screenWidth,
+                screenHeight = screenHeight
+            )
+        }
+    }
+}
+
+/**
+ * Main composable for the Memento app.
+ *
+ * Handles navigation and screen routing based on user setup status.
+ *
+ * @param screenWidth Device screen width for preview generation
+ * @param screenHeight Device screen height for preview generation
+ */
+@Composable
+fun MementoApp(
+    screenWidth: Int,
+    screenHeight: Int
+) {
+    val navController = rememberNavController()
+
+    val viewModel: MainViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+
+    // Set screen dimensions for bitmap generation
+    LaunchedEffect(Unit) {
+        viewModel.setScreenDimensions(screenWidth, screenHeight)
+    }
+
+    val preferences by viewModel.preferences.collectAsState()
+    val metrics by viewModel.metrics.collectAsState()
+
+    // Wait for preferences to load before showing UI
+    if (preferences == null) return
+
+    val context = LocalContext.current
+
+    // If setup is complete, launch the Launcher Activity directly and close MainActivity
+    if (preferences?.isSetupComplete == true) {
+        LaunchedEffect(Unit) {
+            val intent = Intent(context, LauncherActivity::class.java)
+            context.startActivity(intent)
+            (context as? Activity)?.finish()
+        }
+        return // Do not render the onboarding nav host
+    }
+
+    val isDark = preferences?.theme != CalendarTheme.LIGHT
+    val fontScale = preferences?.fontSize?.scale ?: 1.0f
+
+    MementoTheme(darkTheme = isDark) {
+        CompositionLocalProvider(LocalFontScale provides fontScale) {
+            NavHost(
+                navController = navController,
+                startDestination = Screen.Onboarding.route
+            ) {
+                composable(Screen.Onboarding.route) {
+                    OnboardingScreen(
+                        onComplete = { birthDate, lifeExpectancy, showLifeCalendar ->
+                            // Only trigger the DataStore write here.
+                            // DO NOT call startActivity immediately — completeOnboarding is
+                            // async (DataStore write inside a coroutine). If we launch
+                            // LauncherActivity right now, it starts before the birth date is
+                            // persisted, so WallpaperScreen reads null and shows "SET BIRTH DATE".
+                            //
+                            // The preferences flow in MementoApp already watches isSetupComplete.
+                            // Once the write finishes, it emits true and the LaunchedEffect above
+                            // handles the LauncherActivity transition — guaranteed to run only
+                            // after the data is on disk.
+                            viewModel.completeOnboarding(birthDate, lifeExpectancy, showLifeCalendar)
+                        }
+                    )
+                }
+
+                composable(Screen.Home.route) {
+                    HomeScreen(
+                        metrics = metrics,
+                        previewBitmap = viewModel.previewBitmap,
+                        isLoading = viewModel.isLoading,
+                        wallpaperSet = viewModel.wallpaperSet,
+                        onSetWallpaper = { viewModel.setWallpaper() },
+                        onRefresh = { viewModel.refresh() },
+                        onSettingsClick = { navController.navigate(Screen.Settings.route) }
+                    )
+                }
+
+                composable(Screen.Settings.route) {
+                    preferences?.let { prefs ->
+                        SettingsScreen(
+                            preferences = prefs,
+                            onBack = { navController.popBackStack() },
+                            onBirthDateChange = { viewModel.updateBirthDate(it) },
+                            onLifeExpectancyChange = { viewModel.updateLifeExpectancy(it) },
+                            onWallpaperTargetChange = { viewModel.updateWallpaperTarget(it) },
+                            onThemeChange = { viewModel.updateTheme(it) },
+                            onDotStyleChange = { viewModel.updateDotStyle(it) },
+                            onAutoOpenKeyboardChange = { viewModel.updateAutoOpenKeyboard(it) },
+                            onBackgroundStyleChange = { viewModel.updateBackgroundStyle(it) },
+                            onFontSizeChange = { viewModel.updateFontSize(it) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}

@@ -1,8 +1,8 @@
 # Privacy Policy — Memento Launcher
 
 **Effective date:** 6 August 2026
-**App:** Memento Launcher (`com.optimistswe.mementolauncher`)
-**Publisher:** Optimist SWE
+**App:** Memento Launcher (`com.betteruniverse.mementolauncher`)
+**Publisher:** Better Universe
 **Contact:** dmvr1205@gmail.com
 
 ## The short version

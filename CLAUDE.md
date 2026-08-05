@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Memento is a minimalist Android launcher app (HOME replacement) that displays a "life calendar" wallpaper — a dot-matrix grid showing weeks lived vs. remaining. Built with Kotlin, Jetpack Compose, and Material 3.
 
-- **Package**: `com.optimistswe.mementolauncher`
+- **Package**: `com.betteruniverse.mementolauncher`
 - **Min SDK**: 26 (Android 8.0), **Target SDK**: 35
 - **JDK**: 17
 
@@ -21,15 +21,15 @@ Memento is a minimalist Android launcher app (HOME replacement) that displays a 
 # Run a single test class
 # NOTE: `test` is an aggregate task and does not accept --tests
 # ("Unknown command-line option '--tests'"). Target the variant task instead.
-./gradlew testDebugUnitTest --tests "com.optimistswe.mementolauncher.data.PreferencesRepositoryTest"
+./gradlew testDebugUnitTest --tests "com.betteruniverse.mementolauncher.data.PreferencesRepositoryTest"
 
 # Run a single test method
-./gradlew testDebugUnitTest --tests "com.optimistswe.mementolauncher.data.PreferencesRepositoryTest.testMethodName"
+./gradlew testDebugUnitTest --tests "com.betteruniverse.mementolauncher.data.PreferencesRepositoryTest.testMethodName"
 ```
 
 ## Architecture
 
-MVVM + Clean Architecture with three layers under `app/src/main/java/com/optimistswe/mementolauncher/`:
+MVVM + Clean Architecture with three layers under `app/src/main/java/com/betteruniverse/mementolauncher/`:
 
 - **data/** — Repositories backed by DataStore (Preferences). Four separate DataStore instances: preferences, favorites, appLabels, folders. `AppRepository` queries `PackageManager` for installed apps. `BackupManager` handles full settings backup/restore to JSON.
 - **domain/** — Pure business logic (`LifeCalendarCalculator` for week computations).
