@@ -29,12 +29,12 @@ val hasReleaseSigning = releaseStoreFile != null && file(releaseStoreFile).exist
 
 android {
     namespace = "com.optimistswe.mementolauncher"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.optimistswe.mementolauncher"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0.0"
 
