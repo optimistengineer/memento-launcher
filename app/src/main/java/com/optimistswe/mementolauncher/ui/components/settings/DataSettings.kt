@@ -1,5 +1,7 @@
 package com.optimistswe.mementolauncher.ui.components.settings
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
@@ -11,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.optimistswe.mementolauncher.ui.components.DotText
 
@@ -107,7 +110,43 @@ fun DataSettings(
                         spacing = 0.4.dp
                     )
                 }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Google Play's User Data policy requires the privacy policy to be reachable
+                // from inside the app, not only from the store listing.
+                val context = LocalContext.current
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .clickable {
+                            // Guarded: a device with no browser (or a restricted profile) throws
+                            // ActivityNotFoundException, which must not crash the HOME app.
+                            runCatching {
+                                context.startActivity(
+                                    Intent(Intent.ACTION_VIEW, Uri.parse(PRIVACY_POLICY_URL))
+                                )
+                            }
+                        },
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    DotText(
+                        text = "PRIVACY POLICY",
+                        color = dimmed,
+                        dotSize = 1.5.dp,
+                        spacing = 0.5.dp
+                    )
+                }
             }
         }
     }
 }
+
+/**
+ * Public, stable home of the privacy policy. Served by GitHub Pages from the repository's
+ * docs/ directory; the same URL goes in the Play Console App content section, so the two can
+ * never drift apart.
+ */
+internal const val PRIVACY_POLICY_URL =
+    "https://optimistengineer.github.io/memento-launcher/privacy-policy.html"
