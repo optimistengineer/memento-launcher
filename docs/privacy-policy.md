@@ -3,7 +3,7 @@
 **Effective date:** 6 August 2026
 **App:** Memento Launcher (`com.optimistswe.mementolauncher`)
 **Publisher:** Optimist SWE
-**Contact:** dharmveer@aviha.ai
+**Contact:** dmvr1205@gmail.com
 
 ## The short version
 
@@ -119,4 +119,4 @@ always the one published at this address.
 
 ## Contact
 
-Questions about this policy or your data: **dharmveer@aviha.ai**
+Questions about this policy or your data: **dmvr1205@gmail.com**
