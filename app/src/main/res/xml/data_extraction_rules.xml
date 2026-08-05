@@ -1,13 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- See backup_rules.xml for why the package-name stores are excluded. -->
 <data-extraction-rules>
     <cloud-backup>
         <include domain="sharedpref" path="."/>
-        <include domain="database" path="."/>
         <include domain="file" path="."/>
+        <exclude domain="file" path="datastore/launcher_favorites.preferences_pb"/>
+        <exclude domain="file" path="datastore/app_labels.preferences_pb"/>
+        <exclude domain="file" path="datastore/folders.preferences_pb"/>
     </cloud-backup>
     <device-transfer>
         <include domain="sharedpref" path="."/>
-        <include domain="database" path="."/>
         <include domain="file" path="."/>
+        <exclude domain="file" path="datastore/launcher_favorites.preferences_pb"/>
+        <exclude domain="file" path="datastore/app_labels.preferences_pb"/>
+        <exclude domain="file" path="datastore/folders.preferences_pb"/>
     </device-transfer>
 </data-extraction-rules>

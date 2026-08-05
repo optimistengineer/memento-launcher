@@ -1,6 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Backup scope for a launcher.
+
+  The life calendar preferences are device-independent (birth date, life expectancy, theme,
+  font scale) and are worth carrying to a new device.
+
+  The other three stores are lists of package names, which are meaningless on a device where
+  those apps are not installed: favourites and dock corners restored as tappable-but-inert
+  entries, folders full of apps that do not exist, and custom labels for absent packages.
+  They are excluded rather than restored as rubbish. Users who do want them moved can use
+  the in-app JSON backup, which is explicit.
+
+  NOTE: the hidden-apps and distracting-apps sets live inside the INCLUDED main preferences
+  store, not in the excluded ones, so they DO travel with Android's backup. That is
+  intentional (they are harmless when a package is absent — an absent app simply cannot be
+  hidden or intercepted — and they self-heal on install), and the privacy policy
+  (docs/privacy-policy.md, "How data can leave your device") documents them as backed up.
+  If this file's include/exclude set ever changes, update the policy in the same commit.
+-->
 <full-backup-content>
     <include domain="sharedpref" path="."/>
-    <include domain="database" path="."/>
     <include domain="file" path="."/>
+    <exclude domain="file" path="datastore/launcher_favorites.preferences_pb"/>
+    <exclude domain="file" path="datastore/app_labels.preferences_pb"/>
+    <exclude domain="file" path="datastore/folders.preferences_pb"/>
 </full-backup-content>

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -119,8 +120,11 @@ fun AppDrawerScreen(
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    // Handle auto-focus and keyboard (moved here so position toggle doesn't re-trigger it)
-    LaunchedEffect(isVisible) {
+    // Handle auto-focus and keyboard (moved here so position toggle doesn't re-trigger it).
+    // Keyed on autoOpenKeyboard too: the settings panel is opened from this screen, so isVisible
+    // stays true while the user toggles the setting. Without the key the change had no effect
+    // until they swiped away from the drawer and back.
+    LaunchedEffect(isVisible, autoOpenKeyboard) {
         if (isVisible) {
             if (autoOpenKeyboard) {
                 focusRequester.requestFocus()
@@ -132,8 +136,13 @@ fun AppDrawerScreen(
         }
     }
 
+    // Matches the home screen's content cap so swiping between the two pages does not jump between
+    // a centred column and a full-width one. On a 1067dp tablet the app list otherwise hugged the
+    // far left with two thirds of the row empty.
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
     Column(
         modifier = Modifier
+            .widthIn(max = CONTENT_MAX_WIDTH)
             .fillMaxSize()
             .background(Color.Transparent)
             .imePadding()
@@ -225,5 +234,6 @@ fun AppDrawerScreen(
             Spacer(modifier = Modifier.height(16.dp))
             searchBar(searchQuery)
         }
+    }
     }
 }

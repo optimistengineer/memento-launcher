@@ -53,14 +53,22 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Matches LauncherActivity so setup and the launcher itself behave the same way.
+        applyOrientationLock()
         enableEdgeToEdge()
 
-        // Get screen dimensions
-        val metrics = DisplayMetrics()
-        @Suppress("DEPRECATION")
-        windowManager.defaultDisplay.getRealMetrics(metrics)
-        val screenWidth = metrics.widthPixels
-        val screenHeight = metrics.heightPixels
+        // Screen dimensions for wallpaper generation. defaultDisplay is deprecated from API 30;
+        // WindowMetrics is the supported replacement.
+        val (screenWidth, screenHeight) =
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                val bounds = windowManager.maximumWindowMetrics.bounds
+                bounds.width() to bounds.height()
+            } else {
+                val metrics = DisplayMetrics()
+                @Suppress("DEPRECATION")
+                windowManager.defaultDisplay.getRealMetrics(metrics)
+                metrics.widthPixels to metrics.heightPixels
+            }
 
         setContent {
             MementoApp(
@@ -122,7 +130,7 @@ fun MementoApp(
             ) {
                 composable(Screen.Onboarding.route) {
                     OnboardingScreen(
-                        onComplete = { birthDate, lifeExpectancy ->
+                        onComplete = { birthDate, lifeExpectancy, showLifeCalendar ->
                             // Only trigger the DataStore write here.
                             // DO NOT call startActivity immediately — completeOnboarding is
                             // async (DataStore write inside a coroutine). If we launch
@@ -133,7 +141,7 @@ fun MementoApp(
                             // Once the write finishes, it emits true and the LaunchedEffect above
                             // handles the LauncherActivity transition — guaranteed to run only
                             // after the data is on disk.
-                            viewModel.completeOnboarding(birthDate, lifeExpectancy)
+                            viewModel.completeOnboarding(birthDate, lifeExpectancy, showLifeCalendar)
                         }
                     )
                 }

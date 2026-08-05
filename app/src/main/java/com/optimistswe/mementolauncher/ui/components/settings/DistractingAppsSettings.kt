@@ -102,6 +102,14 @@ fun DistractingAppsSettings(
                                 if (words.size <= 10 || newValue.text.length < localMessage.text.length) {
                                     localMessage = newValue
                                     showSavedStatus = false
+                                    // Push straight into the hoisted state. Previously this was
+                                    // only propagated by the small inline SAVE box below, so
+                                    // typing a message and then tapping the panel's main sticky
+                                    // SAVE — the obvious primary action — persisted the OLD
+                                    // value and silently discarded what was typed. Collapsing
+                                    // this section lost it too, since the field's local state
+                                    // leaves composition with it.
+                                    onMindfulMessageChange(newValue.text)
                                 }
                             },
                             textStyle = TextStyle(

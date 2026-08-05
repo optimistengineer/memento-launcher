@@ -27,6 +27,13 @@ import kotlinx.coroutines.delay
 @Composable
 fun MindfulDelayOverlay(
     message: String,
+    /**
+     * The package being intercepted. The countdown is keyed on this rather than on [appName]
+     * because a label is not an identity: two apps can share one, and it is null whenever the
+     * package is not in the loaded app list — in which case switching between two such apps
+     * would have carried the previous countdown over instead of restarting it.
+     */
+    packageName: String,
     appName: String? = null,
     onProceed: () -> Unit,
     onCancel: () -> Unit
@@ -34,10 +41,10 @@ fun MindfulDelayOverlay(
     val onBg = MaterialTheme.colorScheme.onBackground
     val dimmed = onBg.copy(alpha = 0.5f)
 
-    var remainingSeconds by remember(appName) { mutableIntStateOf(5) }
-    var countdownFinished by remember(appName) { mutableStateOf(false) }
+    var remainingSeconds by remember(packageName) { mutableIntStateOf(5) }
+    var countdownFinished by remember(packageName) { mutableStateOf(false) }
 
-    LaunchedEffect(appName) {
+    LaunchedEffect(packageName) {
         while (remainingSeconds > 0) {
             delay(1000L)
             remainingSeconds--
@@ -81,21 +88,25 @@ fun MindfulDelayOverlay(
             // Optical top balance
             Spacer(modifier = Modifier.weight(1.2f))
 
-            DotText(
+            // The message is typed by the user in settings, so its length is unbounded — even the
+            // shipped default ("IS THIS / INTENTIONAL?") needs 323dp at LARGE font scale against
+            // 296dp of usable width on a 360dp phone.
+            AutoScaledDotText(
                 text = displayMessage,
                 color = onBg,
-                dotSize = 3.5.dp, // Slightly larger for emphasis
-                spacing = 1.2.dp,
+                baseDotSize = 3.5.dp, // Slightly larger for emphasis
+                baseSpacing = 1.2.dp,
                 alignment = Alignment.CenterHorizontally
             )
 
             if (appName != null) {
                 Spacer(modifier = Modifier.height(24.dp))
-                DotText(
+                AutoScaledDotText(
                     text = "OPENING ${appName.uppercase()}",
                     color = dimmed,
-                    dotSize = 1.2.dp,
-                    spacing = 0.5.dp
+                    baseDotSize = 1.2.dp,
+                    baseSpacing = 0.5.dp,
+                    alignment = Alignment.CenterHorizontally
                 )
             }
 

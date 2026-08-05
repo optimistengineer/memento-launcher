@@ -20,11 +20,13 @@ import com.optimistswe.mementolauncher.wallpaper.WallpaperUpdater
 import com.optimistswe.mementolauncher.worker.WallpaperUpdateWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import javax.inject.Inject
 
@@ -77,6 +79,32 @@ class MainViewModel @Inject constructor(
     /**
      * Observes user preferences and regenerates calendar when they change.
      */
+
+    /**
+     * Runs a persistence write with a crash guard.
+     *
+     * Every setter in this ViewModel used to be a bare `viewModelScope.launch { repo.write() }`.
+     * DataStore.edit throws IOException when the disk is full and CorruptionException when the
+     * store file is damaged, and an exception in a launched coroutine that nobody catches kills
+     * the process — for a HOME app, that meant one failed settings write crashed the launcher,
+     * and a corrupt store made every subsequent attempt crash it again. Failures here are logged
+     * and dropped: the in-memory StateFlows keep the value for this session, so the UI stays
+     * consistent and the user retries by simply using the app.
+     *
+     * CancellationException is rethrown — swallowing it would break structured cancellation.
+     */
+    private fun persist(block: suspend () -> Unit) {
+        viewModelScope.launch {
+            try {
+                block()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.e("MainViewModel", "persistence write failed", e)
+            }
+        }
+    }
+
     private fun observePreferences() {
         viewModelScope.launch {
             preferencesRepository.getUserPreferences().collect { prefs ->
@@ -105,14 +133,15 @@ class MainViewModel @Inject constructor(
      * @param birthDate User's birth date
      * @param lifeExpectancy Expected lifespan in years
      */
-    fun completeOnboarding(birthDate: LocalDate?, lifeExpectancy: Int) {
-        viewModelScope.launch {
+    fun completeOnboarding(birthDate: LocalDate?, lifeExpectancy: Int, showLifeCalendar: Boolean = true) {
+        persist {
             preferencesRepository.saveAllPreferences(
                 birthDate = birthDate,
                 lifeExpectancy = lifeExpectancy,
                 wallpaperTarget = WallpaperTarget.LOCK, // Default to Lock Screen
                 theme = CalendarTheme.DARK,
-                dotStyle = com.optimistswe.mementolauncher.data.DotStyle.FILLED_CIRCLE
+                dotStyle = com.optimistswe.mementolauncher.data.DotStyle.FILLED_CIRCLE,
+                showLifeCalendar = showLifeCalendar
             )
             scheduleWorker()
         }
@@ -124,7 +153,7 @@ class MainViewModel @Inject constructor(
      * @param birthDate New birth date
      */
     fun updateBirthDate(birthDate: LocalDate) {
-        viewModelScope.launch {
+        persist {
             preferencesRepository.saveBirthDate(birthDate)
             wallpaperSet = false
         }
@@ -136,7 +165,7 @@ class MainViewModel @Inject constructor(
      * @param years New life expectancy in years
      */
     fun updateLifeExpectancy(years: Int) {
-        viewModelScope.launch {
+        persist {
             preferencesRepository.saveLifeExpectancy(years)
             wallpaperSet = false
         }
@@ -146,7 +175,7 @@ class MainViewModel @Inject constructor(
      * Updates the auto open keyboard preference.
      */
     fun updateAutoOpenKeyboard(enabled: Boolean) {
-        viewModelScope.launch {
+        persist {
             preferencesRepository.saveAutoOpenKeyboard(enabled)
         }
     }
@@ -155,7 +184,7 @@ class MainViewModel @Inject constructor(
      * Updates the background style preference.
      */
     fun updateBackgroundStyle(style: com.optimistswe.mementolauncher.data.BackgroundStyle) {
-        viewModelScope.launch {
+        persist {
             preferencesRepository.saveBackgroundStyle(style)
         }
     }
@@ -164,7 +193,7 @@ class MainViewModel @Inject constructor(
      * Updates the font size preference.
      */
     fun updateFontSize(size: com.optimistswe.mementolauncher.data.FontSize) {
-        viewModelScope.launch {
+        persist {
             preferencesRepository.saveFontSize(size)
         }
     }
@@ -175,7 +204,7 @@ class MainViewModel @Inject constructor(
      * @param target Where to apply wallpaper (home, lock, or both)
      */
     fun updateWallpaperTarget(target: WallpaperTarget) {
-        viewModelScope.launch {
+        persist {
             preferencesRepository.saveWallpaperTarget(target)
         }
     }
@@ -186,7 +215,7 @@ class MainViewModel @Inject constructor(
      * @param theme New theme (dark or light)
      */
     fun updateTheme(theme: CalendarTheme) {
-        viewModelScope.launch {
+        persist {
             preferencesRepository.saveTheme(theme)
             wallpaperSet = false
         }
@@ -198,7 +227,7 @@ class MainViewModel @Inject constructor(
      * @param style New dot style (Circle, Ring, etc.)
      */
     fun updateDotStyle(style: com.optimistswe.mementolauncher.data.DotStyle) {
-        viewModelScope.launch {
+        persist {
             preferencesRepository.saveDotStyle(style)
             wallpaperSet = false
         }
@@ -215,19 +244,32 @@ class MainViewModel @Inject constructor(
         generateJob = viewModelScope.launch {
             try {
                 val birthDate = prefs.birthDate ?: return@launch
-                val metrics = calculator.calculateMetrics(birthDate, prefs.lifeExpectancy)
+                // A stored birth date can be in the future (e.g. restored from a hand-edited
+                // backup), which calculateMetrics rejects. The surrounding try/finally only
+                // resets isLoading — it does not catch — so an throw here would propagate out
+                // of the coroutine and crash the app. Skip generation instead.
+                val metrics = runCatching {
+                    calculator.calculateMetrics(birthDate, prefs.lifeExpectancy)
+                }.getOrNull() ?: return@launch
                 _metrics.value = metrics
 
                 val config = createConfig(prefs.theme, prefs.dotStyle)
-                val oldBitmap = previewBitmap
-                val newBitmap = generator.generate(metrics, config)
+                // Drawing allocates a full-screen bitmap and draws thousands of shapes. Doing that
+                // on viewModelScope's main dispatcher janked the UI during onboarding, which is
+                // the one place this preview is generated. Safe to move off-thread now that
+                // CalendarImageGenerator keeps its Paint/Path state per call.
+                val newBitmap = withContext(Dispatchers.Default) {
+                    generator.generate(metrics, config)
+                }
                 if (newBitmap != null) {
+                    // The previous bitmap is deliberately NOT recycled. It was recycled after a
+                    // delay(500) — a cancellation point outside any finally — so a cancelled
+                    // generation leaked it, and the delay itself was a guess at when Compose had
+                    // stopped drawing it. Recycling too early crashes; recycling too late leaks.
+                    // Since API 26 bitmap pixels live in the native heap tracked by
+                    // NativeAllocationRegistry, so simply dropping the reference lets GC reclaim
+                    // it correctly, with no window in which a live Canvas can touch freed memory.
                     previewBitmap = newBitmap
-                    // Delay recycle to give Compose time to stop referencing the old bitmap
-                    if (oldBitmap != null) {
-                        kotlinx.coroutines.delay(500)
-                        oldBitmap.recycle()
-                    }
                 }
             } finally {
                 isLoading = false
@@ -289,6 +331,9 @@ class MainViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
-        previewBitmap?.recycle()
+        // No explicit recycle: Compose may still be drawing this bitmap while the ViewModel is
+        // being torn down, and drawing a recycled bitmap throws. GC reclaims the native pixels
+        // once the last reference goes.
+        previewBitmap = null
     }
 }

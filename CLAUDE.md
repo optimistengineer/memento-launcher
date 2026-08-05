@@ -19,10 +19,12 @@ Memento is a minimalist Android launcher app (HOME replacement) that displays a 
 ./gradlew connectedAndroidTest   # Instrumented tests (requires device/emulator)
 
 # Run a single test class
-./gradlew test --tests "com.optimistswe.mementolauncher.data.PreferencesRepositoryTest"
+# NOTE: `test` is an aggregate task and does not accept --tests
+# ("Unknown command-line option '--tests'"). Target the variant task instead.
+./gradlew testDebugUnitTest --tests "com.optimistswe.mementolauncher.data.PreferencesRepositoryTest"
 
 # Run a single test method
-./gradlew test --tests "com.optimistswe.mementolauncher.data.PreferencesRepositoryTest.testMethodName"
+./gradlew testDebugUnitTest --tests "com.optimistswe.mementolauncher.data.PreferencesRepositoryTest.testMethodName"
 ```
 
 ## Architecture

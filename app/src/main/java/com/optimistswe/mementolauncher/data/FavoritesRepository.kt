@@ -119,14 +119,25 @@ class FavoritesRepository(private val dataStore: DataStore<Preferences>) {
     /**
      * Adds an app to the favorites list if the [MAX_FAVORITES] limit has not been reached.
      *
+     * @param installedPackages when provided, only stored favourites that are actually installed
+     *   count toward the cap. This matters because [removePackages] deliberately keeps entries
+     *   for not-installed apps (restored backups, uninstalls missed while the process was dead) —
+     *   those entries render nowhere, so if they occupied cap slots the user would long-press an
+     *   app, nothing would happen, and there would be nothing visible to remove to free the slot.
+     *   The cap must bound what the user can SEE, not what the store happens to hold.
      * @return `true` if the app was added, `false` if it was already present or the list is full.
      */
-    suspend fun addFavorite(packageName: String): Boolean {
+    suspend fun addFavorite(packageName: String, installedPackages: Set<String>? = null): Boolean {
         var added = false
         dataStore.edit { preferences ->
             val current = (preferences[FAVORITES_KEY] ?: "")
                 .split(",").filter { it.isNotBlank() }.toMutableList()
-            if (!current.contains(packageName) && current.size < MAX_FAVORITES) {
+            val occupiedSlots = if (installedPackages != null) {
+                current.count { it in installedPackages }
+            } else {
+                current.size
+            }
+            if (!current.contains(packageName) && occupiedSlots < MAX_FAVORITES) {
                 current.add(packageName)
                 preferences[FAVORITES_KEY] = current.joinToString(",")
                 added = true
@@ -154,6 +165,43 @@ class FavoritesRepository(private val dataStore: DataStore<Preferences>) {
             if (dockRight != null) preferences[DOCK_RIGHT_KEY] = dockRight
             else preferences.remove(DOCK_RIGHT_KEY)
             preferences[DOCK_SEEDED_KEY] = true
+        }
+    }
+
+    /**
+     * Drops favourites and dock corners whose package is no longer installed.
+     *
+     * Stale package names arrive from more than one direction: a restored cloud backup, an app
+     * uninstalled while the launcher was not running, or a user switching devices. Left in place
+     * they render as home screen entries that look tappable and silently do nothing, because
+     * getLaunchIntentForPackage returns null. FolderRepository already does this for folders.
+     *
+     * No-ops when [validPackages] is empty, since that means the app list has not loaded yet
+     * rather than that nothing is installed.
+     */
+    /**
+     * Removes the given packages from favourites and the dock corners.
+     *
+     * Removal-based, not allow-list-based, and that distinction is load-bearing. This used to be
+     * `scrubPackages(validPackages)`, which deleted everything not currently installed — but "not
+     * installed right now" is not "gone": a JSON backup restored on a new device names apps the
+     * user has not reinstalled yet, and the old scrub permanently destroyed exactly the
+     * favourites and dock slots the restore had just written, on the very next app-list emission.
+     * Not-installed entries are already invisible at render time (LauncherViewModel filters
+     * against the live app list), so keeping them stored costs nothing and lets them reappear
+     * when their app is installed. Only an observed uninstall may delete.
+     */
+    suspend fun removePackages(removedPackages: Set<String>) {
+        if (removedPackages.isEmpty()) return
+        dataStore.edit { preferences ->
+            val current = (preferences[FAVORITES_KEY] ?: "")
+                .split(",").filter { it.isNotBlank() }
+            val kept = current.filterNot { removedPackages.contains(it) }
+            if (kept.size != current.size) {
+                preferences[FAVORITES_KEY] = kept.joinToString(",")
+            }
+            preferences[DOCK_LEFT_KEY]?.let { if (it in removedPackages) preferences.remove(DOCK_LEFT_KEY) }
+            preferences[DOCK_RIGHT_KEY]?.let { if (it in removedPackages) preferences.remove(DOCK_RIGHT_KEY) }
         }
     }
 

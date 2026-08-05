@@ -2,6 +2,7 @@ package com.optimistswe.mementolauncher.ui.managers
 
 import android.app.AlarmManager
 import android.app.AppOpsManager
+import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.os.Process
@@ -20,12 +21,26 @@ import java.util.Locale
  * upcoming events and exposes them as [StateFlow]s for the launcher UI.
  *
  * @property context Application context for system service access and content resolution.
- * @property zoneId The time zone to use for calculating local event times. Defaults to system default.
+ * @param fixedZoneId Pins the time zone, for deterministic tests. Left null in production so the
+ *   zone is re-resolved on every query: this class is a @Singleton, so a zone captured once would
+ *   be frozen for the life of the process and would keep using the old "today" boundary and the
+ *   old alarm offset after the user crossed a time zone.
  */
 class WidgetManager(
     private val context: Context,
-    private val zoneId: ZoneId = ZoneId.systemDefault()
+    private val fixedZoneId: ZoneId? = null
 ) {
+
+    private fun zone(): ZoneId = fixedZoneId ?: ZoneId.systemDefault()
+
+    private companion object {
+        /**
+         * How far before midnight to start the event query, so an app that was already in the
+         * foreground when the day rolled over is visible. Its interval is clipped to the start
+         * of the day, so a longer window cannot inflate the total — it only avoids missing one.
+         */
+        const val PRE_MIDNIGHT_LOOKBACK_MS = 12L * 60 * 60 * 1000
+    }
 
     private val _nextAlarm = MutableStateFlow<String?>(null)
     /** A flow emitting the next scheduled alarm formatted as "ALARM HH:mm", or null if none. */
@@ -61,7 +76,21 @@ class WidgetManager(
     }
 
     /**
-     * Queries [UsageStatsManager] for today's total foreground time and updates [_screenTime].
+     * Computes today's foreground time from raw usage events and updates [_screenTime].
+     *
+     * Deliberately not queryUsageStats(INTERVAL_DAILY, …). Those buckets are pre-aggregated and
+     * documented to span a period *longer* than the range asked for, so summing
+     * totalTimeInForeground over them folds earlier usage into "today" — commonly close to
+     * double-counting. The figure was simply wrong, and wrong in the direction that makes a
+     * digital-wellbeing number alarming.
+     *
+     * Instead this walks MOVE_TO_FOREGROUND / MOVE_TO_BACKGROUND transitions and sums only the
+     * parts of each interval that fall inside [startOfDay, now]. Only one app is in the
+     * foreground at a time, so tracking a single open interval both avoids double-counting
+     * overlapping packages and yields total screen time rather than per-app time.
+     *
+     * The query window starts before midnight so that an app already in the foreground at the
+     * rollover is seen; its interval is then clipped to the start of the day.
      */
     private fun refreshScreenTime() {
         try {
@@ -71,21 +100,52 @@ class WidgetManager(
             }
             val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
             val now = System.currentTimeMillis()
-            val startOfDay = LocalDate.now(zoneId).atStartOfDay(zoneId).toInstant().toEpochMilli()
-            val stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, startOfDay, now)
-            if (stats.isNullOrEmpty()) {
+            // Re-resolve the zone on every call: this class is a @Singleton, so a zone captured
+            // in a constructor default would be frozen for the life of the process and would
+            // keep using the old "today" boundary after the user changed time zone.
+            val zone = zone()
+            val startOfDay = LocalDate.now(zone).atStartOfDay(zone).toInstant().toEpochMilli()
+
+            val events = usm.queryEvents(startOfDay - PRE_MIDNIGHT_LOOKBACK_MS, now)
+            if (events == null) {
                 _screenTime.value = null
                 return
             }
-            val totalMs = stats.sumOf { it.totalTimeInForeground }
+
+            var totalMs = 0L
+            var openedAt: Long? = null
+            val event = UsageEvents.Event()
+
+            while (events.hasNextEvent()) {
+                events.getNextEvent(event)
+                when (event.eventType) {
+                    UsageEvents.Event.MOVE_TO_FOREGROUND -> {
+                        // A second foreground without an intervening background means the first
+                        // interval was never closed; take the later start rather than dropping it.
+                        openedAt = event.timeStamp
+                    }
+                    UsageEvents.Event.MOVE_TO_BACKGROUND -> {
+                        val start = openedAt ?: continue
+                        totalMs += overlapWithToday(start, event.timeStamp, startOfDay, now)
+                        openedAt = null
+                    }
+                }
+            }
+            // Whatever is in the foreground right now is still accruing.
+            openedAt?.let { totalMs += overlapWithToday(it, now, startOfDay, now) }
+
             val totalMinutes = (totalMs / 60_000).toInt()
-            val hours = totalMinutes / 60
-            val minutes = totalMinutes % 60
-            _screenTime.value = String.format(Locale.US, "%dH %02dM TODAY", hours, minutes)
+            _screenTime.value = String.format(
+                Locale.US, "%dH %02dM TODAY", totalMinutes / 60, totalMinutes % 60
+            )
         } catch (_: Exception) {
             _screenTime.value = null
         }
     }
+
+    /** Milliseconds of [start, end] that fall inside [dayStart, dayEnd]. */
+    private fun overlapWithToday(start: Long, end: Long, dayStart: Long, dayEnd: Long): Long =
+        (minOf(end, dayEnd) - maxOf(start, dayStart)).coerceAtLeast(0L)
 
     /**
      * Queries the [AlarmManager] for the next scheduled alarm and updates [_nextAlarm].
@@ -97,7 +157,7 @@ class WidgetManager(
             if (alarmInfo != null) {
                 val triggerTime = alarmInfo.triggerTime
                 val instant = Instant.ofEpochMilli(triggerTime)
-                val localTime = instant.atZone(zoneId).toLocalTime()
+                val localTime = instant.atZone(zone()).toLocalTime()
                 _nextAlarm.value = String.format(Locale.US, "ALARM %02d:%02d", localTime.hour, localTime.minute)
             } else {
                 _nextAlarm.value = null

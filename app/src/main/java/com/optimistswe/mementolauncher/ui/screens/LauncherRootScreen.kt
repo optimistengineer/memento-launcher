@@ -23,6 +23,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.optimistswe.mementolauncher.MainActivity
 import com.optimistswe.mementolauncher.data.BackgroundStyle
@@ -90,30 +91,81 @@ fun LauncherRootScreen(
         if (preferences?.clockStyle == com.optimistswe.mementolauncher.data.ClockStyle.H24_SEC) 1_000L else 30_000L
     }
 
-    // Periodically refreshes the clock while the root screen is active.
-    LaunchedEffect(clockIntervalMs) {
-        while (true) {
-            viewModel.refreshClock()
-            delay(clockIntervalMs)
+    // Both refresh loops are gated on the STARTED lifecycle state and aligned to the wall clock,
+    // fixing three problems the bare `LaunchedEffect { while(true) { ...; delay(n) } }` form had:
+    //
+    // 1. STALENESS AFTER SLEEP — the largest thing on the home screen showed the wrong time.
+    //    delay() counts elapsed-realtime-while-awake, so a night of deep sleep does not advance
+    //    it; and a LaunchedEffect survives the activity being stopped, so nothing re-ran on
+    //    resume either. Waking the phone at 07:30 against a 23:00 last-tick showed "23:00" until
+    //    the loop's next tick happened to land. repeatOnLifecycle cancels the block on ON_STOP
+    //    and restarts it from the top on ON_START, so the first thing that happens on every
+    //    return to the launcher is an immediate refresh.
+    //
+    // 2. PHASE DRIFT — a 30s poll with arbitrary phase displays a time up to ~30s behind even
+    //    while awake. Sleeping until just past the next interval boundary
+    //    (interval - now % interval) makes the refresh land right after the minute/second rolls.
+    //
+    // 3. BACKGROUND WORK FOREVER — the HOME activity lives for weeks, and these loops kept
+    //    re-formatting the clock and making UsageStats/AlarmManager/AppOps binder calls every
+    //    30s/60s the whole time the user was inside other apps, invisible. Now they simply stop
+    //    while the launcher is not visible.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner, clockIntervalMs) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                viewModel.refreshClock()
+                delay(clockIntervalMs - (System.currentTimeMillis() % clockIntervalMs))
+            }
         }
     }
 
     // Refresh system widgets (alarm, screen time) at a slower interval since they change infrequently.
-    LaunchedEffect(Unit) {
-        while (true) {
-            viewModel.refreshWidgets()
-            delay(60_000L)
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                viewModel.refreshWidgets()
+                delay(60_000L)
+            }
         }
     }
 
-    // 3-page pager: 0 = Life Calendar, 1 = Home, 2 = App Drawer
-    // Starts on Page 1 (Home) so swiping left reveals the calendar, right reveals the drawer.
-    val pagerState = rememberPagerState(initialPage = 1, pageCount = { 3 })
+    // The life calendar page is optional (see UserPreferences.showLifeCalendar), so page
+    // indices are derived rather than hardcoded:
+    //   with calendar:    0 = Life Calendar, 1 = Home, 2 = App Drawer
+    //   without calendar:              0 = Home, 1 = App Drawer
+    //
+    // Gate on preferences having loaded before building the pager. rememberPagerState captures
+    // initialPage on first composition only, so composing it against the null-preferences
+    // default and then flipping pageCount would silently land the user on the wrong page.
+    val loadedPreferences = preferences ?: run {
+        // Consume back during the cold-start window too. LauncherActivity no longer overrides
+        // onBackPressed(), so without this, back while DataStore does its first read reaches the
+        // dispatcher's fallback and finishes the HOME activity — a visible flash and relaunch.
+        BackHandler(enabled = true) {}
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black))
+        return
+    }
+    val showCalendar = loadedPreferences.showLifeCalendar
+    val calendarPage = 0
+    val homePage = if (showCalendar) 1 else 0
+    val drawerPage = homePage + 1
+
+    // Keyed on showCalendar: rememberPagerState only consumes initialPage on creation, but adding
+    // or removing the calendar page renumbers every index. Without re-creating the state, closing
+    // settings after enabling the calendar silently moved the user from the app drawer to Home
+    // (currentPage 1 meant "drawer" before and "home" after).
+    val pagerState = key(showCalendar) {
+        rememberPagerState(
+            initialPage = homePage,
+            pageCount = { if (showCalendar) 3 else 2 }
+        )
+    }
 
     // Ensures that search is cleared whenever the user navigates away from the app drawer.
     LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.currentPage }.collect { page ->
-            if (page != 2) {
+            if (page != drawerPage) {
                 viewModel.clearSearch()
             }
         }
@@ -167,7 +219,7 @@ fun LauncherRootScreen(
     }
 
     // Observes ON_RESUME lifecycle events to check if the app currently holds the HOME role.
-    val lifecycleOwner = LocalLifecycleOwner.current
+    // (lifecycleOwner is declared once, up by the refresh loops.)
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
@@ -185,6 +237,8 @@ fun LauncherRootScreen(
 
     MementoTheme(darkTheme = isDark) {
         if (!isDefaultLauncher) {
+            // Same reason as the cold-start branch: this returns before the main BackHandler.
+            BackHandler(enabled = true) {}
             DefaultLauncherScreen(
                 onDismiss = { isDefaultLauncher = true }
             )
@@ -196,41 +250,56 @@ fun LauncherRootScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .systemBarsPadding()
-                    .background(Color.Black)
+                    // Must follow the theme. Hardcoding black here while MementoTheme is set to
+                    // LIGHT makes onBackground near-black, i.e. near-black text on a black
+                    // ground — the entire launcher rendered invisible.
+                    .background(MaterialTheme.colorScheme.background)
             ) {
                 // Only show the matrix grid background on Home (page 1) and App Drawer (page 2).
                 // The calendar page (page 0) is pure content — dots on black — so the grid
                 // background would visually conflict with the life calendar grid itself.
-                if (preferences?.backgroundStyle == BackgroundStyle.MATRIX_GRID
-                    && pagerState.currentPage != 0) {
+                if (loadedPreferences.backgroundStyle == BackgroundStyle.MATRIX_GRID
+                    && !(showCalendar && pagerState.currentPage == calendarPage)) {
                     MatrixGridBackground()
                 }
 
                 val keyboardController = LocalSoftwareKeyboardController.current
                 val focusManager = LocalFocusManager.current
 
-                LaunchedEffect(viewModel) {
+                // Keyed on homePage as well as viewModel. viewModel never changes for the life of
+                // the activity, so a collector started once kept the homePage value from the FIRST
+                // composition — after the calendar was toggled, the HOME button then scrolled to a
+                // stale index (or, when the stale index happened to equal currentPage, did nothing
+                // at all) for as long as the activity lived, which for a HOME app is days.
+                LaunchedEffect(viewModel, homePage) {
                     viewModel.homeIntentEvents.collect {
                         if (showSettingsDialog) {
                             showSettingsDialog = false
                         }
                         keyboardController?.hide()
                         focusManager.clearFocus()
-                        if (pagerState.currentPage != 1) {
-                            pagerState.scrollToPage(1)
+                        if (pagerState.currentPage != homePage) {
+                            pagerState.scrollToPage(homePage)
                         }
                     }
                 }
 
-                BackHandler(enabled = showSettingsDialog || pagerState.currentPage != 1) {
-                    if (showSettingsDialog) {
-                        showSettingsDialog = false
-                    } else {
-                        keyboardController?.hide()
-                        focusManager.clearFocus()
-                        coroutineScope.launch {
-                            pagerState.animateScrollToPage(1)
+                // Always enabled so this consumes back on every API level. Leaving it disabled
+                // on the home page would let back fall through and finish the activity on
+                // API 33+; this is what keeps "back does nothing on home" true now that
+                // LauncherActivity no longer swallows onBackPressed().
+                BackHandler(enabled = true) {
+                    when {
+                        showSettingsDialog -> showSettingsDialog = false
+                        pagerState.currentPage != homePage -> {
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                            coroutineScope.launch {
+                                pagerState.animateScrollToPage(homePage)
+                            }
                         }
+                        // Already on the home page — this IS the home screen, so do nothing.
+                        else -> Unit
                     }
                 }
 
@@ -239,11 +308,12 @@ fun LauncherRootScreen(
                     beyondViewportPageCount = 1,
                     userScrollEnabled = !showSettingsDialog
                 ) { page ->
-                    when (page) {
-                        0 -> {
+                    when {
+                        showCalendar && page == calendarPage -> {
                             WallpaperScreen(
                                 metrics = lifeMetrics,
                                 lifeProgressText = lifeProgress,
+                                isActive = pagerState.currentPage == calendarPage,
                                 onOpenSettings = {
                                     keyboardController?.hide()
                                     focusManager.clearFocus()
@@ -251,7 +321,7 @@ fun LauncherRootScreen(
                                 }
                             )
                         }
-                        1 -> {
+                        page == homePage -> {
                             LauncherHomeScreen(
                                 currentTime = currentTime,
                                 currentDate = currentDate,
@@ -262,10 +332,11 @@ fun LauncherRootScreen(
                                 screenTime = screenTime,
                                 hasUsagePermission = viewModel.hasUsagePermission(),
                                 isBirthday = isBirthdayState,
+                                showCalendar = showCalendar,
                                 onLaunchApp = { pkg -> viewModel.requestAppLaunch(pkg, onLaunchApp) },
                                 onRemoveFavorite = { viewModel.toggleFavorite(it) },
                                 onOpenSearch = {
-                                    coroutineScope.launch { pagerState.animateScrollToPage(2) }
+                                    coroutineScope.launch { pagerState.animateScrollToPage(drawerPage) }
                                 },
                                 onExpandNotifications = {
                                     try {
@@ -280,7 +351,7 @@ fun LauncherRootScreen(
                                 }
                             )
                         }
-                        2 -> {
+                        page == drawerPage -> {
                             val searchBarPosition = preferences?.searchBarPosition ?: SearchBarPosition.TOP
 
                             AppDrawerScreen(
@@ -304,7 +375,7 @@ fun LauncherRootScreen(
                                     focusManager.clearFocus()
                                     showSettingsDialog = true
                                 },
-                                isVisible = pagerState.currentPage == 2,
+                                isVisible = pagerState.currentPage == drawerPage,
                                 autoOpenKeyboard = preferences?.autoOpenKeyboard == true
                             )
                         }
@@ -315,6 +386,9 @@ fun LauncherRootScreen(
                     LauncherSettingsPanel(
                         birthDate = preferences?.birthDate,
                         lifeExpectancy = preferences?.lifeExpectancy ?: 80,
+                        showLifeCalendar = showCalendar,
+                        hasUsageAccess = viewModel.hasUsagePermission(),
+                        onShowLifeCalendarChange = { viewModel.updateShowLifeCalendar(it) },
                         onBirthDateChange = { viewModel.updateBirthDate(it) },
                         onLifeExpectancyChange = { viewModel.updateLifeExpectancy(it) },
                         backgroundStyle = preferences?.backgroundStyle ?: BackgroundStyle.SOLID_BLACK,
@@ -360,7 +434,8 @@ fun LauncherRootScreen(
                 interceptedApp?.let { appPkg ->
                     val appName = viewModel.allApps.value.find { it.packageName == appPkg }?.label
                     MindfulDelayOverlay(
-                        message = preferences?.mindfulMessage ?: "IS THIS\nINTENTIONAL?",
+                        message = loadedPreferences.mindfulMessage,
+                        packageName = appPkg,
                         appName = appName,
                         onProceed = {
                             onLaunchApp(appPkg)
@@ -386,7 +461,8 @@ fun LauncherRootScreen(
 @Composable
 private fun MatrixGridBackground() {
     val dotMatrixColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.15f)
-    Canvas(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+    val surface = MaterialTheme.colorScheme.background
+    Canvas(modifier = Modifier.fillMaxSize().background(surface)) {
         val spacing = 48.dp.toPx()
         val radius = 2.dp.toPx()
         val rows = (size.height / spacing).toInt() + 1

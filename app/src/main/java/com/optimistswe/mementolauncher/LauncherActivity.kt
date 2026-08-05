@@ -29,6 +29,13 @@ class LauncherActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Portrait-only on handsets, free rotation on large screens. Set here rather than in the
+        // manifest because android:screenOrientation takes a literal enum and cannot be varied by
+        // resource qualifier, and the phone/tablet split is the whole point — see res/values/
+        // bools.xml. A side benefit: with rotation gone on phones, the Activity is no longer
+        // recreated by turning the device, so nothing transient is lost that way either.
+        applyOrientationLock()
         // Prevent Android from taking a visual snapshot of the launcher for Recents
         // window.setFlags(
         //     android.view.WindowManager.LayoutParams.FLAG_SECURE,
@@ -70,13 +77,17 @@ class LauncherActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * Override back press to do nothing — standard launcher behavior.
-     */
-    @Deprecated("Deprecated in Java")
-    override fun onBackPressed() {
-        // Do nothing — this IS the home screen
-    }
+    // NOTE: deliberately no onBackPressed() override.
+    //
+    // ComponentActivity.onBackPressed() is what drives onBackPressedDispatcher below API 33.
+    // Overriding it with an empty body (as this class used to) swallowed back entirely on
+    // API 26-32, so the BackHandler in LauncherRootScreen never ran there: the settings panel
+    // could not be dismissed with back, and back would not return from the app drawer to home.
+    // On API 33+ enableOnBackInvokedCallback routes around onBackPressed(), which is why the
+    // two paths behaved differently.
+    //
+    // "Back does nothing on the home page" is now enforced by that BackHandler staying enabled
+    // and consuming the event, which works identically on every supported API level.
 
     /**
      * Launches an app by its package name.

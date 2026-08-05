@@ -11,6 +11,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.compositionLocalOf
@@ -46,48 +49,73 @@ fun DotText(
         calculateLayout(text, scaledDotSize, scaledSpacing)
     }
 
+    // The glyphs are drawn as raw circles on a Canvas, so without this the text is invisible to
+    // accessibility services — the whole launcher surfaces to TalkBack as blank, unlabelled boxes.
+    // Blank strings are left unlabelled so they do not become empty focus stops.
+    val accessibilityModifier = remember(text) {
+        if (text.isNotBlank()) Modifier.semantics { contentDescription = text } else Modifier
+    }
+
     Canvas(
-        modifier = modifier.size(layout.width, layout.height)
+        modifier = modifier
+            .size(layout.width, layout.height)
+            .then(accessibilityModifier)
     ) {
         val dotPx = scaledDotSize.toPx()
         val spacePx = scaledSpacing.toPx()
         val radius = dotPx / 2f
-        
-        var currentY = 0f
-        
-        layout.lines.forEach { line ->
-            // Handle horizontal alignment within the Canvas
-            var currentX = when (alignment) {
-                Alignment.CenterHorizontally -> (size.width - line.width.toPx()) / 2f
-                Alignment.End -> size.width - line.width.toPx()
-                else -> 0f
-            }
 
-            line.chars.forEach { charItem ->
-                if (charItem.char == ' ') {
-                    currentX += (dotPx * 2) + dotPx * 1.5f // Match spacing between chars
-                } else {
-                    val pattern = charItem.pattern
-                    val charRows = pattern.size
-                    val charCols = pattern[0].length
-                    
-                    for (r in 0 until charRows) {
-                        for (c in 0 until charCols) {
-                            if (pattern[r][c] == 'X') {
-                                val x = currentX + c * (dotPx + spacePx) + radius
-                                val y = currentY + r * (dotPx + spacePx) + radius
-                                drawCircle(
-                                    color = color,
-                                    radius = radius,
-                                    center = Offset(x, y)
-                                )
+        // `size(layout.width, ...)` is coerced by the parent's constraints, so when the text is
+        // wider than the space it was given the node ends up narrower than the glyphs it is about
+        // to draw. DrawScope does not clip, so those glyphs used to paint straight over whatever
+        // sat outside this node — including, for a HorizontalPager page, the *neighbouring page*:
+        // the calendar page's "SET YOUR BIRTH DATE" hint overflowed on any screen under ~410dp
+        // and left its final "E" stranded in the home screen's left gutter.
+        // A draw-time clipRect keeps overflow local without the extra render layer that
+        // Modifier.clipToBounds() (a graphicsLayer) would add to every DotText in a long list.
+        clipRect {
+            var currentY = 0f
+
+            layout.lines.forEach { line ->
+                // Handle horizontal alignment within the Canvas
+                var currentX = when (alignment) {
+                    Alignment.CenterHorizontally -> (size.width - line.width.toPx()) / 2f
+                    Alignment.End -> size.width - line.width.toPx()
+                    else -> 0f
+                }
+
+                line.chars.forEach { charItem ->
+                    if (charItem.char == ' ') {
+                        currentX += (dotPx * 2) + dotPx * 1.5f // Match spacing between chars
+                    } else {
+                        val pattern = charItem.pattern
+                        val charRows = pattern.size
+                        val charCols = pattern[0].length
+
+                        // Sit every glyph on a shared baseline. Laying out from the top of the line
+                        // instead makes any glyph shorter than the tallest one float, and any taller
+                        // one hang below its neighbours. The font is uniformly 5 rows today, so this
+                        // is normally zero — it keeps mixed-height glyphs correct if any are added.
+                        val baselineOffset = (line.maxRows - charRows) * (dotPx + spacePx)
+
+                        for (r in 0 until charRows) {
+                            for (c in 0 until charCols) {
+                                if (pattern[r][c] == 'X') {
+                                    val x = currentX + c * (dotPx + spacePx) + radius
+                                    val y = currentY + baselineOffset + r * (dotPx + spacePx) + radius
+                                    drawCircle(
+                                        color = color,
+                                        radius = radius,
+                                        center = Offset(x, y)
+                                    )
+                                }
                             }
                         }
+                        currentX += (charCols * dotPx) + ((charCols - 1).coerceAtLeast(0) * spacePx) + dotPx * 1.5f
                     }
-                    currentX += (charCols * dotPx) + ((charCols - 1).coerceAtLeast(0) * spacePx) + dotPx * 1.5f
                 }
+                currentY += line.height.toPx() + (dotPx * 2) // Line spacing
             }
-            currentY += line.height.toPx() + (dotPx * 2) // Line spacing
         }
     }
 }
@@ -106,7 +134,14 @@ fun AutoScaledDotText(
 ) {
     BoxWithConstraints(
         modifier = modifier.fillMaxWidth(),
-        contentAlignment = Alignment.Center
+        // Honour `alignment` for the block's position, not just for wrapped lines inside it.
+        // This Box fills the width, so pinning it to Center made every caller centred no matter
+        // what they asked for — a Start-aligned caller silently came out centred.
+        contentAlignment = when (alignment) {
+            Alignment.End -> Alignment.CenterEnd
+            Alignment.Start -> Alignment.CenterStart
+            else -> Alignment.Center
+        }
     ) {
         val density = androidx.compose.ui.platform.LocalDensity.current
         val maxWidthDp = with(density) { constraints.maxWidth.toDp() }
@@ -137,32 +172,35 @@ fun AutoScaledDotText(
     }
 }
 
-private data class TextLayout(
+internal data class TextLayout(
     val width: Dp,
     val height: Dp,
     val lines: List<LineLayout>
 )
 
-private data class LineLayout(
+internal data class LineLayout(
     val width: Dp,
     val height: Dp,
+    /** Tallest glyph on the line, in dot rows. Used to sit every glyph on a shared baseline. */
+    val maxRows: Int,
     val chars: List<CharLayout>
 )
 
-private data class CharLayout(
+internal data class CharLayout(
     val char: Char,
     val pattern: List<String>
 )
 
-private fun calculateLayout(text: String, dotSize: Dp, spacing: Dp): TextLayout {
+internal fun calculateLayout(text: String, dotSize: Dp, spacing: Dp): TextLayout {
     val lines = text.split("\n")
     val lineLayouts = lines.map { line ->
         var lineWidth = 0.dp
         var maxHeight = 0.dp
+        var maxRows = 0
         val charLayouts = line.mapIndexed { index, char ->
             val pattern = getPattern(char)
             val charLayout = CharLayout(char, pattern)
-            
+
             if (char == ' ') {
                 lineWidth += (dotSize * 3.5f)
             } else {
@@ -171,14 +209,15 @@ private fun calculateLayout(text: String, dotSize: Dp, spacing: Dp): TextLayout 
                 lineWidth += (dotSize * cols) + (spacing * (cols - 1))
                 val charHeight = (dotSize * rows) + (spacing * (rows - 1))
                 if (charHeight > maxHeight) maxHeight = charHeight
+                if (rows > maxRows) maxRows = rows
             }
-            
+
             if (index < line.length - 1) {
                 lineWidth += dotSize * 1.5f // space between chars
             }
             charLayout
         }
-        LineLayout(lineWidth, maxHeight, charLayouts)
+        LineLayout(lineWidth, maxHeight, maxRows, charLayouts)
     }
 
     val totalWidth = lineLayouts.maxOfOrNull { it.width.value }?.dp ?: 0.dp
@@ -188,18 +227,21 @@ private fun calculateLayout(text: String, dotSize: Dp, spacing: Dp): TextLayout 
     return TextLayout(totalWidth, totalHeight, lineLayouts)
 }
 
-private fun getPattern(char: Char): List<String> {
+internal fun getPattern(char: Char): List<String> {
     return when (char.uppercaseChar()) {
-        '0' -> listOf(".XX.", "X..X", "X..X", "X..X", "X..X", ".XX.")
-        '1' -> listOf(".X.", "XX.", ".X.", ".X.", ".X.", "XXX")
-        '2' -> listOf(".XX.", "X..X", "...X", "..X.", ".X..", "XXXX")
-        '3' -> listOf(".XX.", "X..X", "..X.", "...X", "X..X", ".XX.")
-        '4' -> listOf("X..X", "X..X", "XXXX", "...X", "...X", "...X")
-        '5' -> listOf("XXXX", "X...", "XXX.", "...X", "X..X", ".XX.")
-        '6' -> listOf(".XX.", "X...", "XXX.", "X..X", "X..X", ".XX.")
-        '7' -> listOf("XXXX", "...X", "..X.", ".X..", ".X..", ".X..")
-        '8' -> listOf(".XX.", "X..X", ".XX.", "X..X", "X..X", ".XX.")
-        '9' -> listOf(".XX.", "X..X", "X..X", ".XXX", "...X", ".XX.")
+        // Digits are 5 rows to match the letters' cap height. They used to be 6, and because
+        // glyphs are laid out from the top of the line, every digit dropped one dot-row below
+        // the letters beside it — visible in strings like "WED 5 AUG" or "WEEK 1877 OF 4160".
+        '0' -> listOf(".XX.", "X..X", "X..X", "X..X", ".XX.")
+        '1' -> listOf(".X..", "XX..", ".X..", ".X..", "XXX.")
+        '2' -> listOf(".XX.", "X..X", "..X.", ".X..", "XXXX")
+        '3' -> listOf("XXX.", "...X", ".XX.", "...X", "XXX.")
+        '4' -> listOf("X..X", "X..X", "XXXX", "...X", "...X")
+        '5' -> listOf("XXXX", "X...", "XXX.", "...X", "XXX.")
+        '6' -> listOf(".XX.", "X...", "XXX.", "X..X", ".XX.")
+        '7' -> listOf("XXXX", "...X", "..X.", ".X..", ".X..")
+        '8' -> listOf(".XX.", "X..X", ".XX.", "X..X", ".XX.")
+        '9' -> listOf(".XX.", "X..X", ".XXX", "...X", ".XX.")
         'A' -> listOf(".XX.", "X..X", "XXXX", "X..X", "X..X")
         'B' -> listOf("XXX.", "X..X", "XXX.", "X..X", "XXX.")
         'C' -> listOf(".XXX", "X...", "X...", "X...", ".XXX")
@@ -226,10 +268,10 @@ private fun getPattern(char: Char): List<String> {
         'X' -> listOf("X...X", ".X.X.", "..X..", ".X.X.", "X...X")
         'Y' -> listOf("X..X", ".XX.", "..X.", "..X.", "..X.")
         'Z' -> listOf("XXXX", "...X", "..X.", ".X..", "XXXX")
-        '.' -> listOf("....", "....", "....", "....", "....", ".X..")
-        '%' -> listOf("X..X", "..X.", ".X..", "X..X", "....", "....")
-        '!' -> listOf(".X.", ".X.", ".X.", "...", ".X.", "...")
-        '*' -> listOf("..X.X..", ".XX.XX.", "XX...XX", ".X...X.", "XX...XX", ".XX.XX.", "..X.X..")
+        '.' -> listOf("....", "....", "....", "....", ".X..")
+        '%' -> listOf("X..X", "...X", "..X.", ".X..", "X..X")
+        '!' -> listOf(".X.", ".X.", ".X.", "...", ".X.")
+        '*' -> listOf("..X..", "X.X.X", ".XXX.", "X.X.X", "..X..")
         '<' -> listOf("...X", "..X.", ".X..", "..X.", "...X")
         '>' -> listOf("X...", ".X..", "..X.", ".X..", "X...")
         '[' -> listOf("XX", "X.", "X.", "X.", "XX")
@@ -239,8 +281,8 @@ private fun getPattern(char: Char): List<String> {
         '+' -> listOf("...", ".X.", "XXX", ".X.", "...")
         '-' -> listOf("...", "...", "XXX", "...", "...")
         ':' -> listOf("...", ".X.", "...", ".X.", "...")
-        '/' -> listOf("...X", "..X.", ".X..", "X...")
-        '?' -> listOf(".XX.", "X..X", "...X", "..X.", "....", "..X.")
-        else -> listOf("....", ".XX.", "....", ".XX.", "....", "....")
+        '/' -> listOf("...X", "..X.", "..X.", ".X..", "X...")
+        '?' -> listOf(".XX.", "X..X", "..X.", "....", "..X.")
+        else -> listOf("....", ".XX.", "....", ".XX.", "....")
     }
 }

@@ -3,6 +3,8 @@ package com.optimistswe.mementolauncher.data
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
@@ -122,13 +124,13 @@ class FolderRepositoryTest {
     }
 
     @Test
-    fun `scrubPackages removes uninstalled apps`() = runTest(testDispatcher) {
+    fun `removePackages removes exactly the uninstalled apps`() = runTest(testDispatcher) {
         repository.createFolder("Tools")
         val folderId = repository.folders.first()[0].id
         repository.addAppToFolder(folderId, "pkg.installed")
         repository.addAppToFolder(folderId, "pkg.uninstalled")
 
-        repository.scrubPackages(setOf("pkg.installed"))
+        repository.removePackages(setOf("pkg.uninstalled"))
 
         val folders = repository.folders.first()
         assertEquals(listOf("pkg.installed"), folders[0].packages)
@@ -203,26 +205,28 @@ class FolderRepositoryTest {
     }
 
     @Test
-    fun `scrubPackages with empty valid set removes all packages`() = runTest(testDispatcher) {
+    fun `removePackages with an empty set changes nothing`() = runTest(testDispatcher) {
         repository.createFolder("Tools")
         val folderId = repository.folders.first()[0].id
         repository.addAppToFolder(folderId, "pkg.a")
         repository.addAppToFolder(folderId, "pkg.b")
 
-        repository.scrubPackages(emptySet())
+        repository.removePackages(emptySet())
 
         val folders = repository.folders.first()
-        assertTrue(folders[0].packages.isEmpty())
+        assertEquals(2, folders[0].packages.size)
     }
 
     @Test
-    fun `scrubPackages when all packages are valid changes nothing`() = runTest(testDispatcher) {
+    fun `removePackages keeps folder entries for apps that are merely not installed`() = runTest(testDispatcher) {
+        // The restored-backup case: folder contents restored onto a device where the apps are
+        // not installed yet must survive removals that do not name them.
         repository.createFolder("Tools")
         val folderId = repository.folders.first()[0].id
-        repository.addAppToFolder(folderId, "pkg.a")
-        repository.addAppToFolder(folderId, "pkg.b")
+        repository.addAppToFolder(folderId, "pkg.restored.a")
+        repository.addAppToFolder(folderId, "pkg.restored.b")
 
-        repository.scrubPackages(setOf("pkg.a", "pkg.b"))
+        repository.removePackages(setOf("pkg.something.else"))
 
         val folders = repository.folders.first()
         assertEquals(2, folders[0].packages.size)
@@ -234,6 +238,62 @@ class FolderRepositoryTest {
         repository.addAppToFolder("nonexistent", "com.fb")
 
         val folders = repository.folders.first()
+        assertTrue(folders[0].packages.isEmpty())
+    }
+
+    // ═══════════════════════════════════════════
+    // Unreadable / partially bad stored JSON
+    // ═══════════════════════════════════════════
+
+    private suspend fun writeRawFolders(raw: String) {
+        dataStore.edit { it[stringPreferencesKey("app_folders")] = raw }
+    }
+
+    @Test
+    fun `a mutation does not destroy folders when the stored json is unreadable`() = runTest(testDispatcher) {
+        // Every mutator writes the decoded list straight back. Decoding unreadable JSON to an
+        // empty list therefore meant the first folder interaction permanently destroyed data
+        // that was still intact on disk.
+        writeRawFolders("this is not json at all")
+
+        repository.createFolder("NEW")
+
+        val stored = dataStore.data.first()[stringPreferencesKey("app_folders")]
+        assertEquals("the unreadable blob must be left untouched", "this is not json at all", stored)
+    }
+
+    @Test
+    fun `delete does not destroy folders when the stored json is unreadable`() = runTest(testDispatcher) {
+        writeRawFolders("{{{ broken")
+
+        repository.deleteFolder("whatever")
+
+        assertEquals("{{{ broken", dataStore.data.first()[stringPreferencesKey("app_folders")])
+    }
+
+    @Test
+    fun `one malformed entry does not take the other folders down with it`() = runTest(testDispatcher) {
+        // Previously a single bad element failed the whole array decode, so every folder vanished.
+        writeRawFolders(
+            """[{"id":"a","name":"GOOD","packages":["com.a"]},""" +
+            """{"id":"b","name":12345,"packages":["com.b"]},""" +
+            """{"id":"c","name":"ALSO GOOD","packages":["com.c"]}]"""
+        )
+
+        val folders = repository.folders.first()
+
+        assertEquals(2, folders.size)
+        assertEquals(listOf("ALSO GOOD", "GOOD"), folders.map { it.name }.sorted())
+    }
+
+    @Test
+    fun `a null packages array coerces to empty instead of failing the decode`() = runTest(testDispatcher) {
+        writeRawFolders("""[{"id":"a","name":"NULLPKGS","packages":null}]""")
+
+        val folders = repository.folders.first()
+
+        assertEquals(1, folders.size)
+        assertEquals("NULLPKGS", folders[0].name)
         assertTrue(folders[0].packages.isEmpty())
     }
 }

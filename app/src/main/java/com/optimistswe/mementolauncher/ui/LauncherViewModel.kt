@@ -97,13 +97,13 @@ class LauncherViewModel @Inject constructor(
      * True only on the user's birthday (month + day match today).
      * Derived from the single shared preferences flow to avoid redundant DataStore subscriptions.
      */
-    val isBirthday: StateFlow<Boolean> = preferences
-        .filterNotNull()
-        .map { prefs ->
-            val birthDate = prefs.birthDate ?: return@map false
-            val today = java.time.LocalDate.now()
-            birthDate.monthValue == today.monthValue && birthDate.dayOfMonth == today.dayOfMonth
-        }
+    val isBirthday: StateFlow<Boolean> = combine(
+        preferences.filterNotNull(),
+        timeManager.today
+    ) { prefs, today ->
+        val birthDate = prefs.birthDate ?: return@combine false
+        birthDate.monthValue == today.monthValue && birthDate.dayOfMonth == today.dayOfMonth
+    }
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
@@ -186,12 +186,21 @@ class LauncherViewModel @Inject constructor(
         val assignedPackages = folders.flatMap { it.packages }.toSet()
         val unassignedApps = apps.filterNot { assignedPackages.contains(it.packageName) }
 
+        // Folders were previously emitted unconditionally, so every folder stayed on screen
+        // during a search even when neither it nor anything inside it matched.
+        val folderItems = folders.mapNotNull { folder ->
+            val resolvedApps = folder.packages.mapNotNull { pkg -> apps.find { it.packageName == pkg } }
+                .sortedBy { it.label.lowercase() }
+            val matchesQuery = query.isBlank() ||
+                    folder.name.contains(query, ignoreCase = true) ||
+                    resolvedApps.isNotEmpty()
+            if (matchesQuery) {
+                com.optimistswe.mementolauncher.ui.screens.AppDrawerItem.Folder(folder, resolvedApps)
+            } else null
+        }
+
         val allItems = unassignedApps.map { com.optimistswe.mementolauncher.ui.screens.AppDrawerItem.App(it) } +
-                       folders.map { folder ->
-                           val resolvedApps = folder.packages.mapNotNull { pkg -> apps.find { it.packageName == pkg } }
-                               .sortedBy { it.label.lowercase() }
-                           com.optimistswe.mementolauncher.ui.screens.AppDrawerItem.Folder(folder, resolvedApps)
-                       }
+                       folderItems
 
         val grouped = allItems.groupBy { item ->
             val first = item.displayName.firstOrNull()?.uppercaseChar() ?: '#'
@@ -261,33 +270,91 @@ class LauncherViewModel @Inject constructor(
      */
     private fun observePreferencesDerived() {
         viewModelScope.launch {
-            preferences.filterNotNull().collect { prefs ->
+            // Combined with today's date: the metrics are a function of (preferences, date), and
+            // the preferences flow is DataStore-backed so it only emits when a setting is written.
+            // Observing it alone froze the weeks-lived counter and the whole dot grid at whatever
+            // they were when the process started — for a HOME app, potentially for days.
+            combine(preferences.filterNotNull(), timeManager.today) { prefs, today ->
+                prefs to today
+            }.collect { (prefs, today) ->
                 // Update clock style
                 timeManager.updateClockStyle(prefs.clockStyle)
 
-                // Update life metrics
-                val birthDate = prefs.birthDate
-                if (birthDate != null) {
-                    val metrics = calculator.calculateMetrics(birthDate, prefs.lifeExpectancy)
-                    _lifeMetrics.value = metrics
-                    _lifeProgressText.value = "WEEK ${metrics.weeksLived} OF ${metrics.totalWeeks}"
-                } else {
-                    _lifeProgressText.value = ""
+                // Update life metrics.
+                //
+                // calculateMetrics rejects a birth date in the future. A stored date can still be
+                // invalid — e.g. restored from a hand-edited backup — and letting that throw here
+                // would kill this collector and crash the launcher on every start, which for a HOME
+                // app means an unusable device. Degrade to "no metrics" instead.
+                //
+                // Assigning _lifeMetrics unconditionally also clears stale metrics when the birth
+                // date is removed; previously only the progress text was reset.
+                val metrics = prefs.birthDate?.let { birthDate ->
+                    runCatching {
+                        calculator.calculateMetrics(birthDate, prefs.lifeExpectancy, today)
+                    }.getOrNull()
                 }
+                _lifeMetrics.value = metrics
+                _lifeProgressText.value =
+                    metrics?.let { "WEEK ${it.weeksLived} OF ${it.totalWeeks}" } ?: ""
+            }
+        }
+    }
+
+
+    /**
+     * Runs a persistence write with a crash guard.
+     *
+     * Every setter in this ViewModel used to be a bare `viewModelScope.launch { repo.write() }`.
+     * DataStore.edit throws IOException when the disk is full and CorruptionException when the
+     * store file is damaged, and an exception in a launched coroutine that nobody catches kills
+     * the process — for a HOME app, that meant one failed settings write crashed the launcher,
+     * and a corrupt store made every subsequent attempt crash it again. Failures here are logged
+     * and dropped: the in-memory StateFlows keep the value for this session, so the UI stays
+     * consistent and the user retries by simply using the app.
+     *
+     * CancellationException is rethrown — swallowing it would break structured cancellation.
+     */
+    private fun persist(block: suspend () -> Unit) {
+        viewModelScope.launch {
+            try {
+                block()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.e("LauncherViewModel", "persistence write failed", e)
             }
         }
     }
 
     private fun observeApps() {
         viewModelScope.launch {
-            appRepository.observeApps().collect { apps ->
-                _allApps.value = apps
-                // Seed default favorites on first load
-                seedDefaultsIfNeeded(apps)
-                // Scrub orphaned packages from custom folders
-                val validPackages = apps.map { it.packageName }.toSet()
-                if (validPackages.isNotEmpty()) {
-                    folderRepository.scrubPackages(validPackages)
+            appRepository.observeApps().collect { update ->
+                _allApps.value = update.apps
+                // Seeding and removal are unguarded DataStore writes, which throw IOException
+                // on a full disk or a corrupt store. This collector runs on every launch and on
+                // every package broadcast, so an uncaught throw here would crash the HOME app
+                // repeatedly. The app list itself is already published above, so a failure to
+                // seed or clean up degrades gracefully rather than taking down the launcher.
+                runCatching {
+                    // Seed default favorites on first load
+                    seedDefaultsIfNeeded(update.apps)
+                    // Delete stored placements ONLY for a package the system told us was
+                    // uninstalled (ACTION_PACKAGE_REMOVED without EXTRA_REPLACING), carried on
+                    // the emission itself. Two rejected alternatives, both destructive:
+                    //  - scrubbing everything not currently installed wiped the favourites, dock
+                    //    slots and folder contents a JSON backup had just restored onto a new
+                    //    device, before the user could reinstall their apps;
+                    //  - diffing consecutive emissions deleted placements for apps that merely
+                    //    *look* gone for a moment — disabled in settings, mid-update, or on
+                    //    SD/adoptable storage that unmounted — all of which come back.
+                    // Entries for not-installed packages render nowhere and (via the installed-
+                    // set-aware favourites cap) occupy no pin slots, so keeping them is free,
+                    // and they self-heal when their app appears.
+                    update.removedPackage?.let { pkg ->
+                        folderRepository.removePackages(setOf(pkg))
+                        favoritesRepository.removePackages(setOf(pkg))
+                    }
                 }
             }
         }
@@ -359,11 +426,18 @@ class LauncherViewModel @Inject constructor(
      * Pushes or pulls an app from the home screen favorites.
      */
     fun toggleFavorite(packageName: String) {
-        viewModelScope.launch {
+        persist {
             if (_favoritePackages.value.contains(packageName)) {
                 favoritesRepository.removeFavorite(packageName)
             } else {
-                favoritesRepository.addFavorite(packageName)
+                // The installed set makes the 7-slot cap count only favourites the user can see.
+                // Stored entries for not-installed apps (kept on purpose to survive backup
+                // restores) render nowhere — if they held cap slots, pinning would silently fail
+                // with nothing visible to remove.
+                favoritesRepository.addFavorite(
+                    packageName,
+                    _allApps.value.mapTo(mutableSetOf()) { it.packageName }
+                )
             }
         }
     }
@@ -379,7 +453,7 @@ class LauncherViewModel @Inject constructor(
      * Sets the left corner dock app.
      */
     fun setDockLeftApp(packageName: String?) {
-        viewModelScope.launch {
+        persist {
             favoritesRepository.setDockLeftApp(packageName)
         }
     }
@@ -388,7 +462,7 @@ class LauncherViewModel @Inject constructor(
      * Sets the right corner dock app.
      */
     fun setDockRightApp(packageName: String?) {
-        viewModelScope.launch {
+        persist {
             favoritesRepository.setDockRightApp(packageName)
         }
     }
@@ -400,7 +474,7 @@ class LauncherViewModel @Inject constructor(
      * @param newLabel The new name, or blank to revert to system default.
      */
     fun renameApp(packageName: String, newLabel: String) {
-        viewModelScope.launch {
+        persist {
             if (newLabel.isBlank()) {
                 appLabelRepository.clearCustomLabel(packageName)
             } else {
@@ -415,7 +489,7 @@ class LauncherViewModel @Inject constructor(
      * Creates a new empty folder in the app drawer.
      */
     fun createFolder(name: String) {
-        viewModelScope.launch {
+        persist {
             folderRepository.createFolder(name)
         }
     }
@@ -424,7 +498,7 @@ class LauncherViewModel @Inject constructor(
      * Deletes a folder by ID. Content (apps) are released back to the main list.
      */
     fun deleteFolder(folderId: String) {
-        viewModelScope.launch {
+        persist {
             folderRepository.deleteFolder(folderId)
         }
     }
@@ -433,7 +507,7 @@ class LauncherViewModel @Inject constructor(
      * Changes the display name of an existing folder.
      */
     fun renameFolder(folderId: String, newName: String) {
-        viewModelScope.launch {
+        persist {
             folderRepository.renameFolder(folderId, newName)
         }
     }
@@ -442,7 +516,7 @@ class LauncherViewModel @Inject constructor(
      * Assigns an app package to a folder.
      */
     fun addAppToFolder(folderId: String, packageName: String) {
-        viewModelScope.launch {
+        persist {
             folderRepository.addAppToFolder(folderId, packageName)
         }
     }
@@ -451,7 +525,7 @@ class LauncherViewModel @Inject constructor(
      * Removes an app package from a folder.
      */
     fun removeAppFromFolder(folderId: String, packageName: String) {
-        viewModelScope.launch {
+        persist {
             folderRepository.removeAppFromFolder(folderId, packageName)
         }
     }
@@ -461,7 +535,7 @@ class LauncherViewModel @Inject constructor(
      * Updates the user's birth date.
      */
     fun updateBirthDate(birthDate: java.time.LocalDate) {
-        viewModelScope.launch {
+        persist {
             preferencesRepository.saveBirthDate(birthDate)
         }
     }
@@ -470,7 +544,7 @@ class LauncherViewModel @Inject constructor(
      * Updates the life expectancy setting.
      */
     fun updateLifeExpectancy(years: Int) {
-        viewModelScope.launch {
+        persist {
             preferencesRepository.saveLifeExpectancy(years)
         }
     }
@@ -479,7 +553,7 @@ class LauncherViewModel @Inject constructor(
      * Sets whether the keyboard should auto-open in the app drawer.
      */
     fun updateAutoOpenKeyboard(autoOpen: Boolean) {
-        viewModelScope.launch {
+        persist {
             preferencesRepository.saveAutoOpenKeyboard(autoOpen)
         }
     }
@@ -488,7 +562,7 @@ class LauncherViewModel @Inject constructor(
      * Updates the wallpaper/background visual style.
      */
     fun updateBackgroundStyle(style: com.optimistswe.mementolauncher.data.BackgroundStyle) {
-        viewModelScope.launch {
+        persist {
             preferencesRepository.saveBackgroundStyle(style)
         }
     }
@@ -497,7 +571,7 @@ class LauncherViewModel @Inject constructor(
      * Updates the global font and icon scaling.
      */
     fun updateFontSize(size: com.optimistswe.mementolauncher.data.FontSize) {
-        viewModelScope.launch {
+        persist {
             preferencesRepository.saveFontSize(size)
         }
     }
@@ -506,7 +580,7 @@ class LauncherViewModel @Inject constructor(
      * Updates the clock display style (12h, 24h, etc.).
      */
     fun updateClockStyle(style: com.optimistswe.mementolauncher.data.ClockStyle) {
-        viewModelScope.launch {
+        persist {
             preferencesRepository.saveClockStyle(style)
         }
     }
@@ -515,7 +589,7 @@ class LauncherViewModel @Inject constructor(
      * Sets the vertical position of the search bar (Top or Bottom).
      */
     fun updateSearchBarPosition(position: com.optimistswe.mementolauncher.data.SearchBarPosition) {
-        viewModelScope.launch {
+        persist {
             preferencesRepository.saveSearchBarPosition(position)
         }
     }
@@ -524,7 +598,7 @@ class LauncherViewModel @Inject constructor(
      * Toggles the visibility of a package in the app drawer.
      */
     fun toggleAppVisibility(packageName: String) {
-        viewModelScope.launch {
+        persist {
             preferencesRepository.togglePackageVisibility(packageName)
         }
     }
@@ -533,7 +607,7 @@ class LauncherViewModel @Inject constructor(
      * Toggles whether an app package should trigger the mindful launch delay.
      */
     fun toggleDistractingPackage(packageName: String) {
-        viewModelScope.launch {
+        persist {
             preferencesRepository.toggleDistractingPackage(packageName)
         }
     }
@@ -542,7 +616,7 @@ class LauncherViewModel @Inject constructor(
      * Replaces the entire hidden packages set in a single write.
      */
     fun setHiddenPackages(packages: Set<String>) {
-        viewModelScope.launch {
+        persist {
             preferencesRepository.setHiddenPackages(packages)
         }
     }
@@ -551,7 +625,7 @@ class LauncherViewModel @Inject constructor(
      * Replaces the entire distracting packages set in a single write.
      */
     fun setDistractingPackages(packages: Set<String>) {
-        viewModelScope.launch {
+        persist {
             preferencesRepository.setDistractingPackages(packages)
         }
     }
@@ -560,7 +634,7 @@ class LauncherViewModel @Inject constructor(
      * Updates the custom mindful delay message.
      */
     fun updateMindfulMessage(message: String) {
-        viewModelScope.launch {
+        persist {
             preferencesRepository.saveMindfulMessage(message)
         }
     }
@@ -569,25 +643,45 @@ class LauncherViewModel @Inject constructor(
      * Toggles the intent to use the accessibility service to block shorts/reels.
      */
     fun updateBlockShortFormContent(enabled: Boolean) {
-        viewModelScope.launch {
+        persist {
             preferencesRepository.saveBlockShortFormContent(enabled)
         }
     }
 
+    /** Shows or hides the life calendar page. */
+    fun updateShowLifeCalendar(show: Boolean) {
+        persist {
+            preferencesRepository.saveShowLifeCalendar(show)
+        }
+    }
+
     fun updateUsageNudgeEnabled(enabled: Boolean) {
-        viewModelScope.launch {
+        persist {
             preferencesRepository.saveUsageNudgeEnabled(enabled)
         }
     }
 
     fun updateUsageNudgeMinutes(minutes: Int) {
-        viewModelScope.launch {
+        persist {
             preferencesRepository.saveUsageNudgeMinutes(minutes)
         }
     }
 
     fun refreshWidgets() {
-        widgetManager.refresh()
+        // WidgetManager.refresh() makes three blocking binder calls — AppOpsManager, plus
+        // UsageStatsManager.queryUsageStats which marshals one UsageStats per installed package
+        // out of system_server, routinely tens to hundreds of ms. This is driven by a 60s
+        // LaunchedEffect loop that runs on the Compose main dispatcher, so leaving it inline
+        // dropped a frame on the home screen every minute. Every other heavy path here already
+        // moves off the main thread.
+        viewModelScope.launch(ioDispatcher) {
+            // Guarded: this runs on a 60s timer for the life of the HOME process, and the
+            // UsageStats/AppOps binder calls inside can throw (e.g. SecurityException the moment
+            // the user revokes usage access in system settings while the loop is mid-flight).
+            // One failed refresh must cost one stale widget reading, not the launcher process.
+            runCatching { widgetManager.refresh() }
+                .onFailure { android.util.Log.e("LauncherViewModel", "widget refresh failed", it) }
+        }
     }
 
     // --- Backup & Restore ---

@@ -43,6 +43,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.optimistswe.mementolauncher.domain.CalendarMetrics
+import com.optimistswe.mementolauncher.ui.components.AutoScaledDotText
 import com.optimistswe.mementolauncher.ui.components.DotText
 import com.optimistswe.mementolauncher.ui.components.DotIcon
 import com.optimistswe.mementolauncher.ui.components.DotIconType
@@ -88,11 +89,14 @@ fun HomeScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            DotText(
+            // weight, not fillMaxWidth: this Row balances the title against the settings button.
+            AutoScaledDotText(
                 text = "MEMENTO LAUNCHER",
                 color = MaterialTheme.colorScheme.onBackground,
-                dotSize = 4.dp,
-                spacing = 1.dp
+                modifier = Modifier.weight(1f),
+                baseDotSize = 4.dp,
+                baseSpacing = 1.dp,
+                alignment = Alignment.Start
             )
 
             IconButton(onClick = onSettingsClick) {

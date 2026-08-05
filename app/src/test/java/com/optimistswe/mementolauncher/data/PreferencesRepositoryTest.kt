@@ -278,4 +278,103 @@ class PreferencesRepositoryTest {
         assertEquals(75, prefs.lifeExpectancy)
         assertTrue(prefs.isSetupComplete) // setup is marked complete
     }
+
+    // ═══════════════════════════════════════════
+    // Corrupt / hostile persisted values
+    // ═══════════════════════════════════════════
+
+    @Test
+    fun `an out of range birth date epoch day does not throw`() = runTest(testDispatcher) {
+        // restoreAll writes birthDateEpochDays straight from backup JSON with no validation, and
+        // LocalDate.ofEpochDay throws DateTimeException beyond its supported range. That throw
+        // happens inside .map, downstream of the .catch, so it escapes the flow. Because the bad
+        // value is persisted it would rethrow on every start, leaving a HOME app permanently
+        // unable to launch.
+        repository.restoreAll(
+            birthDateEpochDays = Long.MAX_VALUE,
+            lifeExpectancy = 80,
+            wallpaperTarget = "BOTH",
+            theme = "DARK",
+            dotStyle = "FILLED_CIRCLE",
+            backgroundStyle = "MATRIX_GRID",
+            fontSize = "MEDIUM",
+            isSetupComplete = true,
+            autoOpenKeyboard = true,
+            clockStyle = "H24",
+            searchBarPosition = "TOP",
+            hiddenPackages = emptySet(),
+            distractingPackages = emptySet(),
+            mindfulMessage = "x",
+            blockShortFormContent = false,
+            usageNudgeEnabled = false,
+            usageNudgeMinutes = 15
+        )
+
+        val prefs = repository.getUserPreferences().first()
+
+        assertNull("an unusable epoch day must degrade to no birth date", prefs.birthDate)
+        assertTrue("the rest of the preferences must still load", prefs.isSetupComplete)
+    }
+
+    @Test
+    fun `a negative out of range birth date epoch day does not throw`() = runTest(testDispatcher) {
+        repository.restoreAll(
+            birthDateEpochDays = Long.MIN_VALUE,
+            lifeExpectancy = 80,
+            wallpaperTarget = "BOTH",
+            theme = "DARK",
+            dotStyle = "FILLED_CIRCLE",
+            backgroundStyle = "MATRIX_GRID",
+            fontSize = "MEDIUM",
+            isSetupComplete = true,
+            autoOpenKeyboard = true,
+            clockStyle = "H24",
+            searchBarPosition = "TOP",
+            hiddenPackages = emptySet(),
+            distractingPackages = emptySet(),
+            mindfulMessage = "x",
+            blockShortFormContent = false,
+            usageNudgeEnabled = false,
+            usageNudgeMinutes = 15
+        )
+
+        assertNull(repository.getUserPreferences().first().birthDate)
+    }
+
+    @Test
+    fun `a valid epoch day still round trips`() = runTest(testDispatcher) {
+        val date = LocalDate.of(1990, 5, 15)
+        repository.saveBirthDate(date)
+
+        assertEquals(date, repository.getUserPreferences().first().birthDate)
+    }
+
+    @Test
+    fun `life expectancy is clamped into the supported range on read`() = runTest(testDispatcher) {
+        // The settings UI enforces MIN..MAX but restoreAll does not. A value of 0 makes
+        // totalWeeks 0, and percentageLived then divides by zero and renders as "NaN%".
+        repository.saveLifeExpectancy(0)
+        assertEquals(
+            LifeCalendarCalculator.MIN_LIFE_EXPECTANCY,
+            repository.getUserPreferences().first().lifeExpectancy
+        )
+
+        repository.saveLifeExpectancy(-80)
+        assertEquals(
+            LifeCalendarCalculator.MIN_LIFE_EXPECTANCY,
+            repository.getUserPreferences().first().lifeExpectancy
+        )
+
+        repository.saveLifeExpectancy(9999)
+        assertEquals(
+            LifeCalendarCalculator.MAX_LIFE_EXPECTANCY,
+            repository.getUserPreferences().first().lifeExpectancy
+        )
+    }
+
+    @Test
+    fun `an in range life expectancy is left untouched`() = runTest(testDispatcher) {
+        repository.saveLifeExpectancy(72)
+        assertEquals(72, repository.getUserPreferences().first().lifeExpectancy)
+    }
 }

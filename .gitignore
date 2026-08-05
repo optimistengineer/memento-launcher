@@ -30,3 +30,8 @@ window_dump.xml
 # Backup files
 *.bak
 *~
+
+# Release signing material — never commit
+keystore.properties
+*.jks
+*.keystore

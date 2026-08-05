@@ -30,6 +30,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,21 +74,28 @@ fun AppDrawerList(
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
+    // While a search is active every folder renders expanded. The view model keeps a folder in
+    // the results when its *contents* match the query, so honouring the collapsed state here
+    // would show a bare folder row and hide the very apps that matched — the user sees an empty
+    // result and concludes the app isn't installed. The user's own collapsed set is preserved
+    // and reinstated once the query is cleared.
+    val effectiveCollapsedFolders = if (searchQuery.isBlank()) collapsedFolders else emptySet()
+
     // Scroll to top when search query changes
     LaunchedEffect(searchQuery) {
         listState.scrollToItem(0)
     }
 
     // Build letter→LazyColumn-index map accounting for current folder expansion state.
-    // Recalculated whenever groupedItems or collapsedFolders changes.
-    val letterToIndex = remember(groupedItems, collapsedFolders) {
+    // Recalculated whenever groupedItems or the effective expansion state changes.
+    val letterToIndex = remember(groupedItems, effectiveCollapsedFolders) {
         val map = mutableMapOf<Char, Int>()
         var idx = 0
         groupedItems.forEach { (letter, items) ->
             map[letter] = idx
             items.forEach { item ->
                 idx++ // the folder/app row itself
-                if (item is AppDrawerItem.Folder && !collapsedFolders.contains(item.folder.id)) {
+                if (item is AppDrawerItem.Folder && !effectiveCollapsedFolders.contains(item.folder.id)) {
                     idx += if (item.resolvedApps.isEmpty()) 1 else item.resolvedApps.size
                 }
             }
@@ -156,14 +164,19 @@ fun AppDrawerList(
                                             horizontalArrangement = Arrangement.SpaceBetween,
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            DotText(
+                                            // weight, not fillMaxWidth: this Row lays the name out
+                                            // against the +/- indicator, so the name has to yield
+                                            // that space rather than scale into it.
+                                            AutoScaledDotText(
                                                 text = folder.name,
                                                 color = dimmed,
-                                                dotSize = 3.dp,
-                                                spacing = 1.dp
+                                                modifier = Modifier.weight(1f),
+                                                baseDotSize = 3.dp,
+                                                baseSpacing = 1.dp,
+                                                alignment = Alignment.Start
                                             )
                                             DotText(
-                                                text = if (collapsedFolders.contains(folder.id)) "+" else "−",
+                                                text = if (effectiveCollapsedFolders.contains(folder.id)) "+" else "-",
                                                 color = faint,
                                                 dotSize = 2.dp,
                                                 spacing = 0.5.dp
@@ -172,7 +185,7 @@ fun AppDrawerList(
                                     }
                                 }
 
-                                if (!collapsedFolders.contains(folder.id)) {
+                                if (!effectiveCollapsedFolders.contains(folder.id)) {
                                     if (appsInFolder.isEmpty()) {
                                         item(key = "empty_${folder.id}", contentType = "empty_folder") {
                                             Box(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp, horizontal = 8.dp)) {
@@ -251,6 +264,13 @@ private fun AlphabetIndexBar(
 ) {
     var barHeightPx by remember { mutableIntStateOf(1) }
 
+    // The caller's lambda closes over a letter→index map that changes when folders are
+    // collapsed or expanded, but `letters` does not change with it. Without this, the
+    // long-running awaitEachGesture coroutine keeps invoking the lambda it was started with,
+    // so scrubbing after collapsing a folder scrolls to a stale index — off by that folder's
+    // app count, compounding per collapsed folder.
+    val currentOnLetterSelected by rememberUpdatedState(onLetterSelected)
+
     Column(
         modifier = modifier
             .onSizeChanged { barHeightPx = it.height.coerceAtLeast(1) }
@@ -263,9 +283,9 @@ private fun AlphabetIndexBar(
                             .coerceIn(0, letters.size - 1)
                         return letters[idx]
                     }
-                    onLetterSelected(yToLetter(down.position.y))
+                    currentOnLetterSelected(yToLetter(down.position.y))
                     drag(down.id) { change ->
-                        onLetterSelected(yToLetter(change.position.y))
+                        currentOnLetterSelected(yToLetter(change.position.y))
                     }
                 }
             },
@@ -324,11 +344,13 @@ private fun AppListItem(
             )
             .padding(vertical = 18.dp, horizontal = 8.dp)
     ) {
-        DotText(
+        // Unbounded user data: long labels overflowed the row and painted over their neighbours.
+        AutoScaledDotText(
             text = app.label.uppercase(),
             color = if (isFav) onBg else onBg.copy(alpha = 0.7f),
-            dotSize = 2.5.dp,
-            spacing = 0.8.dp
+            baseDotSize = 2.5.dp,
+            baseSpacing = 0.8.dp,
+            alignment = Alignment.Start
         )
     }
 }
