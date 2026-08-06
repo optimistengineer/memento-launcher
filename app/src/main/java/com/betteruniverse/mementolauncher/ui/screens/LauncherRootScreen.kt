@@ -146,6 +146,39 @@ fun LauncherRootScreen(
         Box(modifier = Modifier.fillMaxSize().background(Color.Black))
         return
     }
+    // Onboarding is not finished — hand the user back to it.
+    //
+    // Granting the HOME role makes this the home app *immediately*, and the system then delivers
+    // a HOME intent as the role dialog closes. That started LauncherActivity on top of the
+    // half-finished onboarding, and because the only gate here was isDefaultLauncher (now true)
+    // the launcher rendered happily and steps 2 and 3 never ran. Because completeOnboarding()
+    // was therefore never called, the damage was permanent, not merely a skipped screen:
+    // is_setup_complete stayed false so every later cold start came straight back here, the
+    // birth date was never collected (the life calendar page reads "SET YOUR BIRTH DATE"
+    // forever), and scheduleWorker() never ran so the weekly wallpaper update was never
+    // scheduled at all.
+    //
+    // MainActivity performs the mirror-image check (setup complete -> come here), and the two
+    // conditions are exclusive, so this cannot ping-pong. Reordering to front reuses the
+    // onboarding instance still sitting in the background with its progress intact instead of
+    // starting a second one from step one.
+    if (!loadedPreferences.isSetupComplete) {
+        BackHandler(enabled = true) {}
+        val onboardingContext = LocalContext.current
+        LaunchedEffect(Unit) {
+            runCatching {
+                onboardingContext.startActivity(
+                    Intent(onboardingContext, MainActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                )
+            }
+        }
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black))
+        return
+    }
+
     val showCalendar = loadedPreferences.showLifeCalendar
     val calendarPage = 0
     val homePage = if (showCalendar) 1 else 0
