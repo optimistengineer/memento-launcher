@@ -509,7 +509,9 @@ enum class BackgroundStyle {
     /** Pure black background for maximum OLED battery saving. */
     SOLID_BLACK,
     /** Minimalist grid of subtle dots. */
-    MATRIX_GRID
+    MATRIX_GRID,
+    /** A still night sky: scattered stars of varying size and brightness on black. */
+    STARFIELD
 }
 
 /**

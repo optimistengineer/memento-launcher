@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -118,7 +119,13 @@ fun AppDrawerList(
             state = listState,
             reverseLayout = reverseOrder,
             modifier = Modifier
-                .fillMaxWidth()
+                // fillMaxSize, not fillMaxWidth: without a height the LazyColumn wraps its
+                // content and sits at the top of its Box, so reverseLayout reversed the item
+                // ORDER but left the whole block floating at the top with the empty space
+                // beneath it — the results ended up ~80dp from the search field they were
+                // supposed to sit next to. Filling the height gives reverseLayout a viewport to
+                // pack against, so the best match lands directly above the field.
+                .fillMaxSize()
                 // Reserve space on the right for the alphabet bar
                 .padding(end = 20.dp)
         ) {

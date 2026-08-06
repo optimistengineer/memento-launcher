@@ -73,8 +73,15 @@ class UserPreferencesTest {
     }
 
     @Test
-    fun `BackgroundStyle has 2 values`() {
-        assertEquals(2, BackgroundStyle.entries.size)
+    fun `BackgroundStyle values are stable`() {
+        // The settings picker renders BackgroundStyle.entries directly and persists the enum by
+        // name, so this guards two things at once: that the set is what the UI expects, and that
+        // no value is renamed without a migration for anyone who already stored the old name.
+        assertEquals(3, BackgroundStyle.entries.size)
+        assertEquals(
+            listOf("SOLID_BLACK", "MATRIX_GRID", "STARFIELD"),
+            BackgroundStyle.entries.map { it.name }
+        )
     }
 
     @Test
