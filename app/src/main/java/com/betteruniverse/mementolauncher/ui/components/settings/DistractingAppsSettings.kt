@@ -21,6 +21,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.border
 import com.betteruniverse.mementolauncher.data.AppInfo
+import com.betteruniverse.mementolauncher.ui.components.AutoScaledDotText
 import com.betteruniverse.mementolauncher.ui.components.DotText
 
 private val WHITESPACE_REGEX = Regex("\\s+")
@@ -73,11 +74,11 @@ fun DistractingAppsSettings(
             ) {
                 // Custom Message Input
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    DotText(
+                    AutoScaledDotText(
                         text = "CUSTOM MESSAGE (10 WORDS MAX)",
                         color = dimmed,
-                        dotSize = 1.dp,
-                        spacing = 0.4.dp
+                        baseDotSize = 1.3.dp,
+                        baseSpacing = 0.4.dp
                     )
                     
                     var localMessage by remember { mutableStateOf(TextFieldValue(mindfulMessage)) }
@@ -156,7 +157,7 @@ fun DistractingAppsSettings(
                     DotText(
                         text = "LOADING APPS...",
                         color = dimmed,
-                        dotSize = 1.dp,
+                        dotSize = 1.3.dp,
                         spacing = 0.4.dp
                     )
                 } else {

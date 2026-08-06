@@ -103,7 +103,7 @@ fun HomeScreen(
                 DotIcon(
                     type = DotIconType.SETTINGS,
                     color = MaterialTheme.colorScheme.onBackground,
-                    dotSize = 0.8.dp,
+                    dotSize = 1.3.dp,
                     spacing = 0.4.dp
                 )
             }
@@ -188,18 +188,18 @@ fun HomeScreen(
             )
         ) {
             if (wallpaperSet) {
-                DotText(
+                AutoScaledDotText(
                     text = "WALLPAPER SET!",
                     color = MaterialTheme.colorScheme.background,
-                    dotSize = 2.dp,
-                    spacing = 1.dp
+                    baseDotSize = 2.dp,
+                    baseSpacing = 1.dp
                 )
             } else {
-                DotText(
+                AutoScaledDotText(
                     text = "SET AS WALLPAPER",
                     color = MaterialTheme.colorScheme.background,
-                    dotSize = 2.dp,
-                    spacing = 1.dp
+                    baseDotSize = 2.dp,
+                    baseSpacing = 1.dp
                 )
             }
         }

@@ -12,6 +12,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
@@ -23,6 +24,30 @@ import androidx.compose.runtime.compositionLocalOf
  * without needing to pass it to every DotText instance manually.
  */
 val LocalFontScale = compositionLocalOf { 1.0f }
+
+/** Largest total text scale the dot-matrix layouts are designed to survive. */
+internal const val MAX_EFFECTIVE_FONT_SCALE = 1.5f
+
+/**
+ * Combines the user's in-app text-size preference with the device's system font scale.
+ *
+ * The app used to honour its own SMALL/MEDIUM/LARGE setting *only*. Someone who had raised the
+ * system font size — the standard accommodation for low vision, and the one people actually
+ * reach for — saw absolutely no change here, because every glyph is drawn as raw dots on a
+ * Canvas and so is invisible to the platform's text scaling. Reading the setting explicitly is
+ * the only way custom-drawn text can respect it.
+ *
+ * The product is capped: the two multiply (both express the same intent, so a user who has asked
+ * for large text twice gets more of it), but the total is clamped, because dot-matrix strings
+ * neither reflow nor wrap and past roughly 1.5x the longer labels stop fitting the narrow
+ * screens this app supports. Clamping trades a little size at the extreme for text that is still
+ * on-screen — [AutoScaledDotText] then shrinks anything that would still overflow.
+ */
+@Composable
+fun effectiveFontScale(): Float {
+    val systemScale = LocalDensity.current.fontScale
+    return (LocalFontScale.current * systemScale).coerceIn(0.8f, MAX_EFFECTIVE_FONT_SCALE)
+}
 
 /**
  * A Text composable that renders characters using a dot matrix style
@@ -40,7 +65,7 @@ fun DotText(
     spacing: Dp = 1.dp,
     alignment: Alignment.Horizontal = Alignment.Start
 ) {
-    val fontScale = LocalFontScale.current
+    val fontScale = effectiveFontScale()
     val scaledDotSize = dotSize * fontScale
     val scaledSpacing = spacing * fontScale
 
@@ -146,7 +171,7 @@ fun AutoScaledDotText(
         val density = androidx.compose.ui.platform.LocalDensity.current
         val maxWidthDp = with(density) { constraints.maxWidth.toDp() }
         
-        val fontScale = LocalFontScale.current
+        val fontScale = effectiveFontScale()
         val scaledDotSize = baseDotSize * fontScale
         val scaledSpacing = baseSpacing * fontScale
 
@@ -256,7 +281,14 @@ internal fun getPattern(char: Char): List<String> {
         'L' -> listOf("X...", "X...", "X...", "X...", "XXXX")
         'M' -> listOf("X...X", "XX.XX", "X.X.X", "X...X", "X...X")
         'N' -> listOf("X..X", "XX.X", "X.XX", "X..X", "X..X")
-        'O' -> listOf(".XX.", "X..X", "X..X", "X..X", ".XX.")
+        // Five wide, where every other round letter is four. '0' and 'O' were previously the
+        // SAME 4x5 pattern — pixel-identical, so "WEEK 1877 OF 4160" drew the same glyph for the
+        // letter and the digit. Widening the letter (rather than marking the digit) is what keeps
+        // the clock stable: the digits stay uniformly 4 wide, so "10:00" and "11:11" measure the
+        // same, while letters are already proportional here ('I' is 3 wide). Adding an interior
+        // dot to the zero instead was rejected — it would have left the two differing by a single
+        // dot, which at 1-2dp dot sizes is no separation at all.
+        'O' -> listOf(".XXX.", "X...X", "X...X", "X...X", ".XXX.")
         'P' -> listOf("XXX.", "X..X", "XXX.", "X...", "X...")
         'Q' -> listOf(".XX.", "X..X", "X..X", ".XX.", "...X")
         'R' -> listOf("XXX.", "X..X", "XXX.", "X.X.", "X..X")

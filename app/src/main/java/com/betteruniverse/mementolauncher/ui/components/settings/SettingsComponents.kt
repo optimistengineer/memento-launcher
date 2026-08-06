@@ -96,7 +96,7 @@ fun SettingsToggle(
             DotText(
                 text = description,
                 color = dimmed.copy(alpha = 0.6f),
-                dotSize = 1.dp,
+                dotSize = 1.3.dp,
                 spacing = 0.4.dp
             )
         }
@@ -162,7 +162,7 @@ fun SettingsSegmentedControl(
                     DotText(
                         text = text,
                         color = if (isSelected) bg else onBg,
-                        dotSize = 1.dp,
+                        dotSize = 1.3.dp,
                         spacing = 0.4.dp
                     )
                 }

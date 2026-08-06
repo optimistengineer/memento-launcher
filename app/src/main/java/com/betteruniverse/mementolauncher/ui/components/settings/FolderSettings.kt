@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.betteruniverse.mementolauncher.ui.components.AutoScaledDotText
 import com.betteruniverse.mementolauncher.ui.components.DotText
 
 /**
@@ -57,11 +58,11 @@ fun FolderSettings(
                     .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                DotText(
+                AutoScaledDotText(
                     text = "GROUP APPS INTO CUSTOM FOLDERS",
                     color = dimmed.copy(alpha = 0.8f),
-                    dotSize = 1.dp,
-                    spacing = 0.4.dp
+                    baseDotSize = 1.3.dp,
+                    baseSpacing = 0.4.dp
                 )
 
                 Spacer(modifier = Modifier.height(4.dp))
@@ -77,7 +78,7 @@ fun FolderSettings(
                     DotText(
                         text = "+ CREATE NEW FOLDER",
                         color = bg,
-                        dotSize = 1.dp,
+                        dotSize = 1.3.dp,
                         spacing = 0.5.dp
                     )
                 }
@@ -151,7 +152,7 @@ fun FolderSettings(
                                 DotText(
                                     text = "CANCEL",
                                     color = dimmed,
-                                    dotSize = 1.dp,
+                                    dotSize = 1.3.dp,
                                     spacing = 0.5.dp
                                 )
                             }
@@ -177,7 +178,7 @@ fun FolderSettings(
                                 DotText(
                                     text = "CREATE",
                                     color = bg,
-                                    dotSize = 1.dp,
+                                    dotSize = 1.3.dp,
                                     spacing = 0.5.dp
                                 )
                             }

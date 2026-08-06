@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.betteruniverse.mementolauncher.data.AppInfo
+import com.betteruniverse.mementolauncher.ui.components.AutoScaledDotText
 import com.betteruniverse.mementolauncher.ui.components.DotText
 
 /**
@@ -57,11 +58,11 @@ fun DockAppsSettings(
                     .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                DotText(
+                AutoScaledDotText(
                     text = "CHOOSE APPS FOR BOTTOM CORNERS",
                     color = dimmed,
-                    dotSize = 1.dp,
-                    spacing = 0.4.dp
+                    baseDotSize = 1.3.dp,
+                    baseSpacing = 0.4.dp
                 )
 
                 // LEFT CORNER

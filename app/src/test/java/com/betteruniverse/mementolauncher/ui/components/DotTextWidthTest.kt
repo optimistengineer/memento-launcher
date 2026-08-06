@@ -29,7 +29,7 @@ class DotTextWidthTest {
      * user's font scale set to LARGE.
      */
     private val budgetDp = 320f - 64f
-    private val largeFontScale = 1.2f
+    private val largeFontScale = 1.5f
 
     private val uiSources: List<File> by lazy {
         val root = generateSequence(File("").absoluteFile) { it.parentFile }
@@ -77,7 +77,12 @@ class DotTextWidthTest {
         // padding(start = 8, end = 16) plus the hint Column's own padding(32) + padding(16),
         // leaving 360 - 24 - 96 = 240dp on a very common phone width.
         val usableDp = 360f - 24f - 96f
-        val layout = calculateLayout("SET YOUR\nBIRTH DATE", 3.dp * largeFontScale, 1.dp * largeFontScale)
+        // Measured at the DEFAULT scale, deliberately. This hint is an AutoScaledDotText, whose
+        // whole job is to shrink when it would not fit, so asserting it fits at the maximum
+        // scale would only be asserting that auto-scaling exists. What matters — and what was
+        // actually broken — is that the *unscaled* two-line form fits without any shrinking,
+        // so a normal user sees it at full size rather than silently reduced.
+        val layout = calculateLayout("SET YOUR\nBIRTH DATE", 3.dp, 1.dp)
 
         assertTrue(
             "birth-date hint needs ${layout.width.value}dp but only has ${usableDp}dp",

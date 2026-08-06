@@ -15,6 +15,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.betteruniverse.mementolauncher.domain.LifeCalendarCalculator
+import com.betteruniverse.mementolauncher.ui.components.AutoScaledDotText
 import com.betteruniverse.mementolauncher.ui.components.DotText
 import com.betteruniverse.mementolauncher.ui.components.DottedDatePickerDialog
 import java.time.LocalDate
@@ -100,17 +101,17 @@ fun LifeCalendarSettings(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        DotText(
+                        AutoScaledDotText(
                             text = "SHOW CALENDAR PAGE",
                             color = onBg,
-                            dotSize = 1.5.dp,
-                            spacing = 0.5.dp
+                            baseDotSize = 1.5.dp,
+                            baseSpacing = 0.5.dp
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         DotText(
                             text = "SWIPE LEFT FROM HOME",
                             color = dimmed,
-                            dotSize = 1.dp,
+                            dotSize = 1.3.dp,
                             spacing = 0.4.dp
                         )
                     }

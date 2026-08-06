@@ -95,7 +95,7 @@ fun BehaviorSettings(
                         text = if (hasUsageAccess) "SHOWN ON HOME SCREEN"
                                else "TAP TO ALLOW USAGE ACCESS",
                         color = dimmed,
-                        dotSize = 1.dp,
+                        dotSize = 1.3.dp,
                         spacing = 0.4.dp
                     )
                 }

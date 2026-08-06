@@ -309,7 +309,7 @@ fun AppDrawerDialogs(
                         DotText(
                             text = "NO FOLDERS YET",
                             color = faint,
-                            dotSize = 1.dp,
+                            dotSize = 1.3.dp,
                             spacing = 0.5.dp
                         )
                     } else {
@@ -409,7 +409,7 @@ fun AppDrawerDialogs(
                             DotText(
                                 text = "RESET",
                                 color = dimmed,
-                                dotSize = 1.dp,
+                                dotSize = 1.3.dp,
                                 spacing = 0.5.dp
                             )
                         }
@@ -434,7 +434,7 @@ fun AppDrawerDialogs(
                             DotText(
                                 text = "SAVE",
                                 color = bg,
-                                dotSize = 1.dp,
+                                dotSize = 1.3.dp,
                                 spacing = 0.5.dp
                             )
                         }
@@ -513,7 +513,7 @@ fun AppDrawerDialogs(
                             DotText(
                                 text = "CANCEL",
                                 color = dimmed,
-                                dotSize = 1.dp,
+                                dotSize = 1.3.dp,
                                 spacing = 0.5.dp
                             )
                         }
@@ -538,7 +538,7 @@ fun AppDrawerDialogs(
                             DotText(
                                 text = "SAVE",
                                 color = bg,
-                                dotSize = 1.dp,
+                                dotSize = 1.3.dp,
                                 spacing = 0.5.dp
                             )
                         }
