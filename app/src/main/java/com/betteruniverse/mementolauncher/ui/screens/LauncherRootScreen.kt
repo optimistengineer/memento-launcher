@@ -412,7 +412,11 @@ fun LauncherRootScreen(
                                     focusManager.clearFocus()
                                     showSettingsDialog = true
                                 },
-                                isVisible = pagerState.currentPage == drawerPage,
+                                // The settings overlay covers the drawer without changing the
+                                // page, and the drawer's auto-keyboard effect keys on isVisible:
+                                // toggling OPEN KEYBOARD inside settings otherwise raised the
+                                // keyboard over the panel with focus in the hidden search field.
+                                isVisible = pagerState.currentPage == drawerPage && !showSettingsDialog,
                                 autoOpenKeyboard = preferences?.autoOpenKeyboard == true
                             )
                         }
@@ -428,6 +432,7 @@ fun LauncherRootScreen(
                         onShowLifeCalendarChange = { viewModel.updateShowLifeCalendar(it) },
                         onBirthDateChange = { viewModel.updateBirthDate(it) },
                         onLifeExpectancyChange = { viewModel.updateLifeExpectancy(it) },
+                        onAdjustLifeExpectancy = { viewModel.adjustLifeExpectancy(it) },
                         backgroundStyle = preferences?.backgroundStyle ?: BackgroundStyle.SOLID_BLACK,
                         onBackgroundStyleChange = { style -> viewModel.updateBackgroundStyle(style) },
                         fontSize = preferences?.fontSize ?: FontSize.MEDIUM,
@@ -441,9 +446,9 @@ fun LauncherRootScreen(
                         onCreateFolder = { name -> viewModel.createFolder(name) },
                         allApps = allApps,
                         hiddenPackages = preferences?.hiddenPackages ?: emptySet(),
-                        onSetHiddenPackages = { viewModel.setHiddenPackages(it) },
+                        onToggleHidden = { viewModel.toggleAppVisibility(it) },
                         distractingPackages = preferences?.distractingPackages ?: emptySet(),
-                        onSetDistractingPackages = { viewModel.setDistractingPackages(it) },
+                        onToggleDistracting = { viewModel.toggleDistractingPackage(it) },
                         mindfulMessage = preferences?.mindfulMessage ?: "IS THIS\nINTENTIONAL?",
                         onMindfulMessageChange = { msg -> viewModel.updateMindfulMessage(msg) },
                         dockLeftPkg = dockLeft?.packageName,

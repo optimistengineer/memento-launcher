@@ -157,6 +157,26 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
      *
      * @param years The number of years the user expects or wants to live.
      */
+    /**
+     * Adds [delta] to the stored life expectancy inside one DataStore transaction.
+     *
+     * The settings stepper applies instantly, so each tap must be a read-modify-write here
+     * rather than "current displayed value + 1" computed in the UI: the displayed value only
+     * refreshes after the previous write round-trips, so rapid taps computed from it collapse
+     * into one.
+     */
+    suspend fun adjustLifeExpectancy(delta: Int) {
+        dataStore.edit { preferences ->
+            val current = preferences[PreferencesKeys.LIFE_EXPECTANCY]
+                ?: LifeCalendarCalculator.DEFAULT_LIFE_EXPECTANCY
+            preferences[PreferencesKeys.LIFE_EXPECTANCY] =
+                (current + delta).coerceIn(
+                    LifeCalendarCalculator.MIN_LIFE_EXPECTANCY,
+                    LifeCalendarCalculator.MAX_LIFE_EXPECTANCY
+                )
+        }
+    }
+
     suspend fun saveLifeExpectancy(years: Int) {
         dataStore.edit { preferences ->
             preferences[PreferencesKeys.LIFE_EXPECTANCY] = years
