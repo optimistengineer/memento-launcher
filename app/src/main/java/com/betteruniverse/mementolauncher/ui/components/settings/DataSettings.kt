@@ -53,13 +53,13 @@ fun DataSettings(
                 DotText(
                     text = "EXPORT OR IMPORT ALL",
                     color = dimmed.copy(alpha = 0.6f),
-                    dotSize = 1.dp,
+                    dotSize = 1.3.dp,
                     spacing = 0.4.dp
                 )
                 DotText(
                     text = "SETTINGS AS JSON",
                     color = dimmed.copy(alpha = 0.6f),
-                    dotSize = 1.dp,
+                    dotSize = 1.3.dp,
                     spacing = 0.4.dp
                 )
 
@@ -80,7 +80,7 @@ fun DataSettings(
                         DotText(
                             text = "BACKUP",
                             color = bg,
-                            dotSize = 1.dp,
+                            dotSize = 1.3.dp,
                             spacing = 0.5.dp
                         )
                     }
@@ -96,7 +96,7 @@ fun DataSettings(
                         DotText(
                             text = "RESTORE",
                             color = bg,
-                            dotSize = 1.dp,
+                            dotSize = 1.3.dp,
                             spacing = 0.5.dp
                         )
                     }
@@ -106,7 +106,7 @@ fun DataSettings(
                     DotText(
                         text = statusText,
                         color = dimmed,
-                        dotSize = 1.dp,
+                        dotSize = 1.3.dp,
                         spacing = 0.4.dp
                     )
                 }

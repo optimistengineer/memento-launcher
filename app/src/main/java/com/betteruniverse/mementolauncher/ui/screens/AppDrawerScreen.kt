@@ -32,6 +32,7 @@ import com.betteruniverse.mementolauncher.data.SearchBarPosition
 import com.betteruniverse.mementolauncher.ui.components.AppDrawerDialogs
 import com.betteruniverse.mementolauncher.ui.components.AppDrawerList
 import com.betteruniverse.mementolauncher.ui.components.AppDrawerSearchBar
+import com.betteruniverse.mementolauncher.ui.components.AutoScaledDotText
 import com.betteruniverse.mementolauncher.ui.components.DotText
 
 /**
@@ -170,11 +171,11 @@ fun AppDrawerScreen(
             modifier = Modifier.fillMaxWidth(),
             contentAlignment = Alignment.Center
         ) {
-            DotText(
+            AutoScaledDotText(
                 text = "LONG PRESS FOR OPTIONS",
                 color = faint,
-                dotSize = 1.5.dp,
-                spacing = 0.5.dp
+                baseDotSize = 1.5.dp,
+                baseSpacing = 0.5.dp
             )
         }
 

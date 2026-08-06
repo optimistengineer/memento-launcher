@@ -79,17 +79,17 @@ fun DefaultLauncherScreen(
             spacing = 0.5.dp
         )
         Spacer(modifier = Modifier.height(8.dp))
-        DotText(
+        AutoScaledDotText(
             text = "DEFAULT HOME SCREEN",
             color = dimmed,
-            dotSize = 1.5.dp,
-            spacing = 0.5.dp
+            baseDotSize = 1.5.dp,
+            baseSpacing = 0.5.dp
         )
         Spacer(modifier = Modifier.height(6.dp))
         DotText(
             text = "TO USE THIS LAUNCHER",
             color = dimmed.copy(alpha = 0.3f),
-            dotSize = 1.dp,
+            dotSize = 1.3.dp,
             spacing = 0.4.dp
         )
 
@@ -120,11 +120,11 @@ fun DefaultLauncherScreen(
                 },
             contentAlignment = Alignment.Center
         ) {
-            DotText(
+            AutoScaledDotText(
                 text = "SET AS DEFAULT",
                 color = bg,
-                dotSize = 2.5.dp,
-                spacing = 0.8.dp
+                baseDotSize = 2.5.dp,
+                baseSpacing = 0.8.dp
             )
         }
     }

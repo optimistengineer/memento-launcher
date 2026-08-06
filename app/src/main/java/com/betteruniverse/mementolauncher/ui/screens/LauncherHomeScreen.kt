@@ -338,11 +338,11 @@ private fun ConfirmRemoveFavourite(
                     baseSpacing = 0.55.dp,
                     alignment = Alignment.Start
                 )
-                DotText(
+                AutoScaledDotText(
                     text = "IT STAYS IN THE APP DRAWER",
                     color = onBg.copy(alpha = 0.4f),
-                    dotSize = 1.2.dp,
-                    spacing = 0.4.dp
+                    baseDotSize = 1.2.dp,
+                    baseSpacing = 0.4.dp
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -396,10 +396,10 @@ private fun BirthdayGreeting(color: androidx.compose.ui.graphics.Color) {
         label = "birthdayAlpha"
     )
 
-    DotText(
+    AutoScaledDotText(
         text = "HAPPY BIRTHDAY",
         color = color.copy(alpha = alpha),
-        dotSize = 2.dp,
-        spacing = 0.7.dp
+        baseDotSize = 2.dp,
+        baseSpacing = 0.7.dp
     )
 }

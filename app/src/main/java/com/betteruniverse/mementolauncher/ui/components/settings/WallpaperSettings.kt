@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.betteruniverse.mementolauncher.ui.components.AutoScaledDotText
 import com.betteruniverse.mementolauncher.ui.components.DotText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -60,16 +61,16 @@ fun WallpaperSettings(
                     .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                DotText(
+                AutoScaledDotText(
                     text = "TIP: BLACK WALLPAPER GIVES",
                     color = dimmed.copy(alpha = 0.6f),
-                    dotSize = 1.dp,
-                    spacing = 0.4.dp
+                    baseDotSize = 1.3.dp,
+                    baseSpacing = 0.4.dp
                 )
                 DotText(
                     text = "THE BEST EXPERIENCE",
                     color = dimmed.copy(alpha = 0.6f),
-                    dotSize = 1.dp,
+                    dotSize = 1.3.dp,
                     spacing = 0.4.dp
                 )
 
@@ -102,7 +103,7 @@ fun WallpaperSettings(
                     DotText(
                         text = if (wallpaperApplied) "APPLIED" else "APPLY BLACK WALLPAPER",
                         color = if (wallpaperApplied) dimmed else bg,
-                        dotSize = 1.dp,
+                        dotSize = 1.3.dp,
                         spacing = 0.5.dp
                     )
                 }

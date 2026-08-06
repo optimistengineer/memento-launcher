@@ -100,7 +100,7 @@ fun AppDrawerSearchBar(
             DotIcon(
                 type = DotIconType.SETTINGS,
                 color = dimmed,
-                dotSize = 0.8.dp,
+                dotSize = 1.3.dp,
                 spacing = 0.4.dp
             )
         }

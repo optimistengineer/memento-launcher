@@ -64,7 +64,7 @@ fun HiddenAppsSettings(
                     DotText(
                         text = "LOADING APPS...",
                         color = dimmed,
-                        dotSize = 1.dp,
+                        dotSize = 1.3.dp,
                         spacing = 0.4.dp
                     )
                 } else {

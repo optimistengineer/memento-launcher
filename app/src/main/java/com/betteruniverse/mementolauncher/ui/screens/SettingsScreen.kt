@@ -37,6 +37,7 @@ import com.betteruniverse.mementolauncher.data.CalendarTheme
 import com.betteruniverse.mementolauncher.data.UserPreferences
 import com.betteruniverse.mementolauncher.domain.LifeCalendarCalculator
 import com.betteruniverse.mementolauncher.wallpaper.WallpaperTarget
+import com.betteruniverse.mementolauncher.ui.components.AutoScaledDotText
 import com.betteruniverse.mementolauncher.ui.components.DotText
 import com.betteruniverse.mementolauncher.ui.components.DotStyleIcon
 import com.betteruniverse.mementolauncher.ui.components.DottedDatePickerDialog
@@ -94,7 +95,7 @@ fun SettingsScreen(
             ) {
                 DotText(text = "<", color = onBg, dotSize = 2.dp, spacing = 1.dp)
             }
-            DotText(text = "SETTINGS", color = onBg, dotSize = 4.dp, spacing = 1.dp)
+            AutoScaledDotText(text = "SETTINGS", color = onBg, baseDotSize = 4.dp, baseSpacing = 1.dp)
         }
 
         Spacer(modifier = Modifier.height(32.dp))
@@ -259,7 +260,7 @@ fun SettingsScreen(
                                 DotText(
                                     text = style.name.replace("_", "\n"),
                                     color = textColor,
-                                    dotSize = 1.dp,
+                                    dotSize = 1.3.dp,
                                     spacing = 1.dp
                                 )
                             }
@@ -309,7 +310,7 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        DotText(text = "AUTO OPEN KEYBOARD", color = onBg, dotSize = 1.5.dp, spacing = 1.dp)
+                        AutoScaledDotText(text = "AUTO OPEN KEYBOARD", color = onBg, baseDotSize = 1.5.dp, baseSpacing = 1.dp)
                         
                         // Custom Dot Toggle
                         Box(

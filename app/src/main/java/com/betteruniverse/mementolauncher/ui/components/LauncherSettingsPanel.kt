@@ -144,11 +144,11 @@ fun LauncherSettingsPanel(
 
                 Spacer(modifier = Modifier.width(16.dp))
 
-                DotText(
+                AutoScaledDotText(
                     text = "SETTINGS",
                     color = onBg,
-                    dotSize = 4.dp,
-                    spacing = 1.2.dp
+                    baseDotSize = 4.dp,
+                    baseSpacing = 1.2.dp
                 )
             }
 
