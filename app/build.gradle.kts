@@ -36,7 +36,11 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = 2
-        versionName = "1.0.1"
+        // versionName is the string users see and has no uniqueness rule, so the first public
+        // release stays 1.0.0. versionCode must still advance: Play permanently consumes a
+        // version code on upload (code 1 went to the internal track) and rejects reuse even if
+        // that release is deleted.
+        versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
