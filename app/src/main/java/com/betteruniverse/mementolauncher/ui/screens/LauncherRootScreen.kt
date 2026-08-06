@@ -288,12 +288,16 @@ fun LauncherRootScreen(
                     // ground — the entire launcher rendered invisible.
                     .background(MaterialTheme.colorScheme.background)
             ) {
-                // Only show the matrix grid background on Home (page 1) and App Drawer (page 2).
-                // The calendar page (page 0) is pure content — dots on black — so the grid
-                // background would visually conflict with the life calendar grid itself.
-                if (loadedPreferences.backgroundStyle == BackgroundStyle.MATRIX_GRID
-                    && !(showCalendar && pagerState.currentPage == calendarPage)) {
-                    MatrixGridBackground()
+                // Decorative backgrounds are suppressed on the life calendar page: that page is
+                // itself thousands of dots on black, and anything behind it competes with the
+                // very grid the user is trying to read.
+                val onCalendarPage = showCalendar && pagerState.currentPage == calendarPage
+                if (!onCalendarPage) {
+                    when (loadedPreferences.backgroundStyle) {
+                        BackgroundStyle.MATRIX_GRID -> MatrixGridBackground()
+                        BackgroundStyle.STARFIELD -> StarfieldBackground()
+                        BackgroundStyle.SOLID_BLACK -> Unit
+                    }
                 }
 
                 val keyboardController = LocalSoftwareKeyboardController.current
@@ -483,6 +487,41 @@ fun LauncherRootScreen(
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * A still night sky.
+ *
+ * Deliberately NOT animated. Twinkling would mean an infinite transition requesting a frame every
+ * frame for as long as the home screen is composed, which for a HOME app is days — the same
+ * mistake the birthday greeting and the current-week pulse each made once. This draws once and
+ * then costs nothing until something else invalidates.
+ *
+ * The layout is generated from a fixed seed, so the sky is identical on every recomposition,
+ * rotation and relaunch rather than reshuffling itself each time the user glances at it. Star
+ * count scales with screen area so a tablet gets the same density rather than the same sparse
+ * handful, and brightness follows a power curve: mostly faint pinpricks with a few brighter
+ * standouts, which is what stops it reading as evenly-scattered noise.
+ */
+@Composable
+private fun StarfieldBackground() {
+    val onBg = MaterialTheme.colorScheme.onBackground
+    val surface = MaterialTheme.colorScheme.background
+
+    Canvas(modifier = Modifier.fillMaxSize().background(surface)) {
+        val areaDp = (size.width / density) * (size.height / density)
+        val count = (areaDp / 2600f).toInt().coerceIn(60, 260)
+        val rng = kotlin.random.Random(20260807)
+        repeat(count) {
+            val x = rng.nextFloat() * size.width
+            val y = rng.nextFloat() * size.height
+            // Power curve: most values land near 0, a few reach 1 — faint dust, occasional star.
+            val t = rng.nextFloat().let { it * it * it }
+            val radius = (0.6f + t * 1.5f).dp.toPx()
+            val alpha = 0.14f + t * 0.62f
+            drawCircle(color = onBg.copy(alpha = alpha), radius = radius, center = Offset(x, y))
         }
     }
 }
