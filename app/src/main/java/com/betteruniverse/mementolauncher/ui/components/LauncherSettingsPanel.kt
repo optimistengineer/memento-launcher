@@ -4,11 +4,14 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -19,6 +22,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
@@ -35,6 +39,7 @@ import com.betteruniverse.mementolauncher.data.ClockStyle
 import com.betteruniverse.mementolauncher.data.FontSize
 import com.betteruniverse.mementolauncher.data.SearchBarPosition
 import java.time.LocalDate
+import kotlinx.coroutines.launch
 import java.time.format.DateTimeFormatter
 
 /**
@@ -217,6 +222,7 @@ fun LauncherSettingsPanel(
                                 BackgroundStyle.SOLID_BLACK -> "SOLID BLACK"
                                 BackgroundStyle.MATRIX_GRID -> "MATRIX GRID"
                                 BackgroundStyle.STARFIELD -> "STARFIELD"
+                                BackgroundStyle.DAYLIGHT -> "DAYLIGHT CYCLE"
                             },
                             selected = backgroundStyle == style,
                             onClick = { onBackgroundStyleChange(style) },
@@ -630,6 +636,12 @@ private fun ColumnScope.ScrollPage(content: @Composable ColumnScope.() -> Unit) 
     Column(
         modifier = Modifier
             .weight(1f)
+            // imePadding BEFORE verticalScroll — the order is the fix. After the scroll, the
+            // padding lands inside the scrolled content: the viewport stays full-height, the
+            // system thinks the field behind the keyboard is "visible", and bringIntoView does
+            // nothing — the user typed blind into the folder-name field. Before the scroll, the
+            // keyboard shrinks the viewport itself, so relocation has something true to measure.
+            .imePadding()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp)
     ) {
@@ -659,11 +671,21 @@ private fun ColumnScope.AppPickerPage(
     dimmed: Color,
     faint: Color
 ) {
+    var query by rememberSaveable { mutableStateOf("") }
     val sorted = remember(apps) { apps.sortedBy { it.label.lowercase() } }
-    Column(Modifier.weight(1f)) {
+    // Selected-first when not searching, so what the page manages is visible without scrolling
+    // a 200-app list; a query switches to plain filtered order.
+    val shown = remember(sorted, selected, query) {
+        val filtered = if (query.isBlank()) sorted
+        else sorted.filter { it.label.contains(query, ignoreCase = true) }
+        if (query.isBlank()) filtered.sortedByDescending { selected.contains(it.packageName) }
+        else filtered
+    }
+    Column(Modifier.weight(1f).imePadding()) {
         HintText(emptyHint, faint)
+        PickerSearchField(query = query, onQueryChange = { query = it }, onBg = onBg, faint = faint)
         LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
-            items(sorted, key = { it.packageName }) { app ->
+            items(shown, key = { it.packageName }) { app ->
                 ChoiceRow(
                     label = app.label.uppercase(),
                     selected = selected.contains(app.packageName),
@@ -685,20 +707,73 @@ private fun ColumnScope.SingleAppPickerPage(
     onBg: Color,
     faint: Color
 ) {
+    var query by rememberSaveable { mutableStateOf("") }
     val sorted = remember(apps) { apps.sortedBy { it.label.lowercase() } }
-    LazyColumn(modifier = Modifier.weight(1f).fillMaxSize().padding(horizontal = 24.dp)) {
-        item {
-            ChoiceRow("NONE", selectedPkg == null, { onPick(null) }, onBg, faint)
+    val shown = remember(sorted, query) {
+        if (query.isBlank()) sorted else sorted.filter { it.label.contains(query, ignoreCase = true) }
+    }
+    Column(Modifier.weight(1f).imePadding()) {
+        PickerSearchField(query = query, onQueryChange = { query = it }, onBg = onBg, faint = faint)
+        LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
+            // NONE stays reachable regardless of the query.
+            item {
+                ChoiceRow("NONE", selectedPkg == null, { onPick(null) }, onBg, faint)
+            }
+            items(shown, key = { it.packageName }) { app ->
+                ChoiceRow(
+                    label = app.label.uppercase(),
+                    selected = selectedPkg == app.packageName,
+                    onClick = { onPick(app.packageName) },
+                    onBg = onBg, faint = faint
+                )
+            }
+            item { Spacer(Modifier.height(40.dp)) }
         }
-        items(sorted, key = { it.packageName }) { app ->
-            ChoiceRow(
-                label = app.label.uppercase(),
-                selected = selectedPkg == app.packageName,
-                onClick = { onPick(app.packageName) },
-                onBg = onBg, faint = faint
-            )
+    }
+}
+
+/** The same idiom as the drawer's search bar, scaled down for the pickers. */
+@Composable
+private fun PickerSearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onBg: Color,
+    faint: Color
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 6.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(faint.copy(alpha = 0.10f))
+    ) {
+        BasicTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            singleLine = true,
+            textStyle = TextStyle(color = onBg, fontSize = 15.sp, fontFamily = FontFamily.Monospace),
+            cursorBrush = SolidColor(onBg),
+            decorationBox = { inner ->
+                Box(contentAlignment = Alignment.CenterStart) {
+                    if (query.isEmpty()) DotText("SEARCH", faint, dotSize = 1.4.dp, spacing = 0.5.dp)
+                    inner()
+                }
+            },
+            modifier = Modifier.weight(1f).padding(horizontal = 16.dp, vertical = 13.dp)
+        )
+        if (query.isNotEmpty()) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(50))
+                    .clickable { onQueryChange("") }
+                    .clearAndSetSemantics { contentDescription = "Clear search" },
+                contentAlignment = Alignment.Center
+            ) {
+                DotIcon(type = DotIconType.CLOSE, color = onBg.copy(alpha = 0.5f), dotSize = 1.1.dp, spacing = 0.35.dp)
+            }
         }
-        item { Spacer(Modifier.height(40.dp)) }
     }
 }
 
@@ -746,6 +821,7 @@ private fun MessageRow(
             cursorBrush = SolidColor(onBg),
             modifier = Modifier
                 .fillMaxWidth()
+                .revealOnFocus()
                 .clip(RoundedCornerShape(12.dp))
                 .background(faint.copy(alpha = 0.10f))
                 .padding(horizontal = 16.dp, vertical = 14.dp)
@@ -777,6 +853,7 @@ private fun NewFolderRow(onCreateFolder: (String) -> Unit, onBg: Color, dimmed: 
                 },
                 modifier = Modifier
                     .weight(1f)
+                    .revealOnFocus()
                     .clip(RoundedCornerShape(12.dp))
                     .background(faint.copy(alpha = 0.10f))
                     .padding(horizontal = 16.dp, vertical = 14.dp)
@@ -798,6 +875,36 @@ private fun NewFolderRow(onCreateFolder: (String) -> Unit, onBg: Color, dimmed: 
             }
         }
     }
+}
+
+/**
+ * Scrolls a text field into view once it gains focus.
+ *
+ * imePadding alone resizes the page but does not move the scroll: focus lands before the IME
+ * finishes animating, so Compose's automatic relocation measures against the pre-keyboard
+ * viewport and the field ends up hidden — the user typed blind into the folder-name field.
+ * The 300ms delay lets the IME animation settle before asking for the final position.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun Modifier.revealOnFocus(): Modifier {
+    val requester = remember { BringIntoViewRequester() }
+    val scope = rememberCoroutineScope()
+    return this
+        .bringIntoViewRequester(requester)
+        .onFocusChanged { state ->
+            if (state.isFocused) {
+                scope.launch {
+                    // The IME animation length varies by device and has no callback we can use
+                    // from here, so ask three times across its plausible duration; bringIntoView
+                    // is idempotent, and the last request lands after the insets have settled.
+                    repeat(3) {
+                        kotlinx.coroutines.delay(250)
+                        requester.bringIntoView()
+                    }
+                }
+            }
+        }
 }
 
 private fun labelFor(pkg: String?, apps: List<AppInfo>): String =

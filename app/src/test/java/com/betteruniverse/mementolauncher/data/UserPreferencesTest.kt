@@ -77,9 +77,9 @@ class UserPreferencesTest {
         // The settings picker renders BackgroundStyle.entries directly and persists the enum by
         // name, so this guards two things at once: that the set is what the UI expects, and that
         // no value is renamed without a migration for anyone who already stored the old name.
-        assertEquals(3, BackgroundStyle.entries.size)
+        assertEquals(4, BackgroundStyle.entries.size)
         assertEquals(
-            listOf("SOLID_BLACK", "MATRIX_GRID", "STARFIELD"),
+            listOf("SOLID_BLACK", "MATRIX_GRID", "STARFIELD", "DAYLIGHT"),
             BackgroundStyle.entries.map { it.name }
         )
     }

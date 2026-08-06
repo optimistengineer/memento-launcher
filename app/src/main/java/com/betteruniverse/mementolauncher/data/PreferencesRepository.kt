@@ -531,7 +531,12 @@ enum class BackgroundStyle {
     /** Minimalist grid of subtle dots. */
     MATRIX_GRID,
     /** A still night sky: scattered stars of varying size and brightness on black. */
-    STARFIELD
+    STARFIELD,
+    /**
+     * Follows the real clock: stars at night, a warm glow at dawn, subdued daylight, an orange
+     * horizon at sunset. Not animated — redrawn by the launcher's existing clock tick.
+     */
+    DAYLIGHT
 }
 
 /**
