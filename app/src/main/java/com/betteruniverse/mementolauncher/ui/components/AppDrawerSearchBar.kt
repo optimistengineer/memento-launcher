@@ -1,6 +1,11 @@
 package com.betteruniverse.mementolauncher.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -36,6 +41,7 @@ import androidx.compose.ui.unit.sp
 fun AppDrawerSearchBar(
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
+    onClearSearch: () -> Unit,
     onOpenSettings: () -> Unit,
     focusRequester: FocusRequester,
     focusManager: FocusManager
@@ -50,8 +56,8 @@ fun AppDrawerSearchBar(
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // Search Input Box
-        Box(
-            contentAlignment = Alignment.CenterStart,
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .weight(1f)
                 .background(
@@ -90,9 +96,35 @@ fun AppDrawerSearchBar(
                     }
                 },
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .weight(1f)
                     .focusRequester(focusRequester)
             )
+
+            // Clearing meant holding backspace or selecting the whole query by hand, which is
+            // the one thing people do constantly while searching — type, miss, retype.
+            // Only rendered when there is something to clear, so the empty field stays quiet.
+            if (searchQuery.isNotEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .clickable {
+                            onClearSearch()
+                            // Keep focus and the keyboard up: clearing is a step in the middle
+                            // of searching, not the end of it.
+                            focusRequester.requestFocus()
+                        }
+                        .semantics { contentDescription = "Clear search" },
+                    contentAlignment = Alignment.Center
+                ) {
+                    DotIcon(
+                        type = DotIconType.CLOSE,
+                        color = dimmed,
+                        dotSize = 1.3.dp,
+                        spacing = 0.4.dp
+                    )
+                }
+            }
         }
 
         // Settings Icon Button

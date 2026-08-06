@@ -122,9 +122,14 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
                     clockStyle = preferences[PreferencesKeys.CLOCK_STYLE]
                         ?.let { enumValueOfOrNull<ClockStyle>(it) }
                         ?: ClockStyle.H24,
+                    // Bottom by default. The search field is the drawer's primary control, and on
+                    // a phone this tall the top edge is out of thumb reach one-handed. It also
+                    // sits directly above the keyboard that opens the moment you focus it, so
+                    // the field does not jump and the hand does not travel. Users who prefer the
+                    // conventional top position can switch it in settings.
                     searchBarPosition = preferences[PreferencesKeys.SEARCH_BAR_POSITION]
                         ?.let { enumValueOfOrNull<SearchBarPosition>(it) }
-                        ?: SearchBarPosition.TOP,
+                        ?: SearchBarPosition.BOTTOM,
                     hiddenPackages = preferences[PreferencesKeys.HIDDEN_PACKAGES] ?: emptySet(),
                     distractingPackages = preferences[PreferencesKeys.DISTRACTING_PACKAGES] ?: DEFAULT_DISTRACTING_APPS,
                     mindfulMessage = preferences[PreferencesKeys.MINDFUL_MESSAGE] ?: "IS THIS\nINTENTIONAL?",
