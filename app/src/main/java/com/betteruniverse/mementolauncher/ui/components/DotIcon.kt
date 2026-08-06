@@ -47,6 +47,8 @@ enum class DotIconType {
     GAME,
     SEARCH,
     SOCIAL,
+    /** An X, for clearing the search field. */
+    CLOSE,
     /**
      * A settings gear sized for app icons. Distinct from [SETTINGS], which is a 25x25 pattern
      * drawn at 0.8.dp for the app drawer's gear button — at the dock's 2.5.dp that pattern would
@@ -541,6 +543,20 @@ internal fun getIconPattern(type: DotIconType): List<String> {
         )
 
         // Search: magnifier
+        // A symmetric X on the same 9x9 grid as the other glyphs, so it sits at the same
+        // optical weight as the settings gear beside it in the search bar.
+        DotIconType.CLOSE -> listOf(
+            "XX.....XX",
+            "XX.....XX",
+            ".XX...XX.",
+            "..XX.XX..",
+            "...XXX...",
+            "..XX.XX..",
+            ".XX...XX.",
+            "XX.....XX",
+            "XX.....XX"
+        )
+
         DotIconType.SEARCH -> listOf(
             ".XXXX....",
             "X....X...",

@@ -377,4 +377,13 @@ class PreferencesRepositoryTest {
         repository.saveLifeExpectancy(72)
         assertEquals(72, repository.getUserPreferences().first().lifeExpectancy)
     }
+
+    @Test
+    fun `search bar defaults to the bottom when never set`() = runTest(testDispatcher) {
+        // The drawer's primary control belongs in the thumb zone on a tall phone, and directly
+        // above the keyboard it summons. Pinned as a test because it is a default a stray edit
+        // could silently flip back, changing first-run behaviour for every new user.
+        val prefs = repository.getUserPreferences().first()
+        assertEquals(SearchBarPosition.BOTTOM, prefs.searchBarPosition)
+    }
 }

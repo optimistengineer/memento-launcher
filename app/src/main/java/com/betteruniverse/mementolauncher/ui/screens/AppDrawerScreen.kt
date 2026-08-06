@@ -154,6 +154,7 @@ fun AppDrawerScreen(
                 AppDrawerSearchBar(
                     searchQuery = query,
                     onSearchQueryChange = onSearchQueryChange,
+                    onClearSearch = onClearSearch,
                     onOpenSettings = onOpenSettings,
                     focusRequester = focusRequester,
                     focusManager = focusManager
@@ -217,7 +218,11 @@ fun AppDrawerScreen(
         )
 
         // Alphabetical List
+        // With the field at the bottom, the first result should be the one nearest the thumb and
+        // the field itself, not marooned at the top of the screen behind every other match.
+        // Scoped to an active query so plain A-Z browsing is unaffected.
         AppDrawerList(
+            reverseOrder = searchBarPosition == SearchBarPosition.BOTTOM && searchQuery.isNotBlank(),
             groupedItems = groupedItems,
             searchQuery = searchQuery,
             isFavorite = isFavorite,

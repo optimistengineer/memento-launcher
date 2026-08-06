@@ -63,6 +63,14 @@ fun AppDrawerList(
     onLaunchApp: (String) -> Unit,
     onAppLongClick: (AppInfo) -> Unit,
     onFolderLongClick: (AppFolder) -> Unit,
+    /**
+     * Lay results out from the bottom up, so the best match sits closest to the search field.
+     *
+     * Only meaningful when the search bar is at the bottom AND a query is active. Browsing the
+     * full A-Z list stays top-down whatever the bar position: reversing it would put Z at the
+     * top, which is not what anyone means by alphabetical.
+     */
+    reverseOrder: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val hapticFeedback = LocalHapticFeedback.current
@@ -108,6 +116,7 @@ fun AppDrawerList(
     Box(modifier = modifier) {
         LazyColumn(
             state = listState,
+            reverseLayout = reverseOrder,
             modifier = Modifier
                 .fillMaxWidth()
                 // Reserve space on the right for the alphabet bar
