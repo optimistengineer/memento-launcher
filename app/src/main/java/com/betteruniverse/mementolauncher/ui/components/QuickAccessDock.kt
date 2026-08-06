@@ -1,7 +1,5 @@
 package com.betteruniverse.mementolauncher.ui.components
 
-import android.graphics.drawable.Drawable
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -13,12 +11,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
-import androidx.core.graphics.drawable.toBitmap
 import com.betteruniverse.mementolauncher.data.AppInfo
 
 /**
@@ -60,22 +56,34 @@ fun DockCornerIcon(
                 spacing = 0.5.dp
             )
         } else {
-            // Fallback to the real system app icon
-            val appIcon: Drawable? = remember(app.packageName) {
-                try {
-                    context.packageManager.getApplicationIcon(app.packageName)
-                } catch (_: Exception) {
-                    null
-                }
+            // Monogram, not the system icon.
+            //
+            // Twenty-six category glyphs cover every app people actually dock — phone, camera,
+            // messages, browser, maps, music, mail, wallet and so on all resolve — but they
+            // cover only ~29% of a real 222-app device, and the tail (food delivery, banking,
+            // airline, local apps) cannot be hand-drawn: there is no finite set to draw.
+            // Dropping a full-colour launcher icon into a monochrome dot-matrix dock was the
+            // single loudest thing on the home screen. The app's initial in the launcher's own
+            // font identifies it just as well at 44dp, needs no per-app work, and covers 100%.
+            val initial = remember(app.label) {
+                app.label.uppercase().firstOrNull { it in 'A'..'Z' || it in '0'..'9' }?.toString()
             }
-            if (appIcon != null) {
-                val imageBitmap = remember(appIcon) {
-                    appIcon.toBitmap(width = 64, height = 64).asImageBitmap()
-                }
-                Image(
-                    bitmap = imageBitmap,
-                    contentDescription = app.label,
-                    modifier = Modifier.size(28.dp)
+            if (initial != null) {
+                DotText(
+                    text = initial,
+                    color = onBg,
+                    dotSize = 2.5.dp,
+                    spacing = 0.8.dp
+                )
+            } else {
+                // No Latin letter or digit in the name at all (a fully non-Latin label): the
+                // dot font has no glyph for it, so show the neutral app mark rather than a
+                // placeholder blob.
+                DotIcon(
+                    type = DotIconType.STORE,
+                    color = onBg,
+                    dotSize = 2.5.dp,
+                    spacing = 0.5.dp
                 )
             }
         }
@@ -83,7 +91,7 @@ fun DockCornerIcon(
 }
 
 /**
- * Maps a package name to a custom [DotIconType], or null to fall back to the system icon.
+ * Maps a package name to a custom [DotIconType], or null to fall back to a monogram.
  *
  * Delegates to the shared resolver in DotIcon.kt so the dock, the dock picker and anywhere
  * else that wants a dot glyph all agree on the same mapping.
