@@ -543,6 +543,11 @@ class LauncherViewModel @Inject constructor(
     /**
      * Updates the life expectancy setting.
      */
+    /** Stepper taps: atomic read-modify-write so rapid presses each count. */
+    fun adjustLifeExpectancy(delta: Int) {
+        persist { preferencesRepository.adjustLifeExpectancy(delta) }
+    }
+
     fun updateLifeExpectancy(years: Int) {
         persist {
             preferencesRepository.saveLifeExpectancy(years)
