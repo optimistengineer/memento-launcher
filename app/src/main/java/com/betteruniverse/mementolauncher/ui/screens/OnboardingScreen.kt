@@ -397,9 +397,15 @@ private fun StepIndicator(current: Int, total: Int, active: Color, inactive: Col
 @Composable
 private fun DotDiamond(color: Color, markerColor: Color, size: Dp) {
     Canvas(modifier = Modifier.size(size)) {
-        val n = 3
+        // Must stay the SAME mark as the launcher icon (res/drawable/ic_launcher_foreground.xml):
+        // the Current Week (13) diamond — every cell within taxicab distance 2 of the centre,
+        // 1+3+5+3+1 = 13 dots, with the current week marked in green. This drew n = 3 (25 dots)
+        // while the app icon was the 13-dot mark, so the first thing a new user saw during
+        // onboarding was a different logo from the one they had just tapped to get there.
+        // Ratios below are taken from the icon: dot radius 0.34 x pitch, marker 1.10 x that.
+        val n = 2
         val pitch = this.size.minDimension / (2 * n + 2)
-        val r = pitch * 0.32f
+        val r = pitch * 0.34f
         val cx = this.size.width / 2f
         val cy = this.size.height / 2f
         for (k in -n..n) {
@@ -410,7 +416,7 @@ private fun DotDiamond(color: Color, markerColor: Color, size: Dp) {
                 val isCentre = gx == 0f && k == 0
                 drawCircle(
                     color = if (isCentre) markerColor else color,
-                    radius = if (isCentre) r * 1.15f else r,
+                    radius = if (isCentre) r * 1.10f else r,
                     center = Offset(cx + gx * pitch, cy + k * pitch)
                 )
             }
