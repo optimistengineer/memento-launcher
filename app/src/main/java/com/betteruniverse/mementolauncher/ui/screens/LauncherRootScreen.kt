@@ -32,6 +32,7 @@ import com.betteruniverse.mementolauncher.data.CalendarTheme
 import com.betteruniverse.mementolauncher.data.FontSize
 import com.betteruniverse.mementolauncher.data.SearchBarPosition
 import com.betteruniverse.mementolauncher.ui.LauncherViewModel
+import com.betteruniverse.mementolauncher.ui.components.DaylightModel
 import com.betteruniverse.mementolauncher.ui.components.LauncherSettingsPanel
 import com.betteruniverse.mementolauncher.ui.components.LocalFontScale
 import com.betteruniverse.mementolauncher.ui.components.MindfulDelayOverlay
@@ -296,6 +297,16 @@ fun LauncherRootScreen(
                     when (loadedPreferences.backgroundStyle) {
                         BackgroundStyle.MATRIX_GRID -> MatrixGridBackground()
                         BackgroundStyle.STARFIELD -> StarfieldBackground()
+                        // Keyed on the clock tick that already drives the time display: the sky
+                        // recomputes at most once a minute, only while the launcher is visible,
+                        // and never runs an animation. currentTime is the invalidation source so
+                        // no new timer exists for this feature to leak.
+                        BackgroundStyle.DAYLIGHT -> {
+                            val minuteOfDay = remember(currentTime) {
+                                java.time.LocalTime.now().let { it.hour * 60 + it.minute }
+                            }
+                            DaylightBackground(minuteOfDay = minuteOfDay)
+                        }
                         BackgroundStyle.SOLID_BLACK -> Unit
                     }
                 }
@@ -491,6 +502,39 @@ fun LauncherRootScreen(
                         }
                     )
                 }
+            }
+        }
+    }
+}
+
+/**
+ * The daylight-cycle sky: a two-stop vertical gradient plus the starfield, both driven entirely
+ * by [DaylightModel.specFor]. See that file for why this is a pure function of the clock.
+ * Reuses the starfield's fixed seed so the night sky here is the same sky as STARFIELD.
+ */
+@Composable
+private fun DaylightBackground(minuteOfDay: Int) {
+    val onBg = MaterialTheme.colorScheme.onBackground
+    val spec = remember(minuteOfDay) { DaylightModel.specFor(minuteOfDay) }
+
+    Canvas(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+        drawRect(
+            brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                0f to Color(spec.zenithArgb.toInt()),
+                1f to Color(spec.horizonArgb.toInt())
+            )
+        )
+        if (spec.starAlpha > 0.01f) {
+            val areaDp = (size.width / density) * (size.height / density)
+            val count = (areaDp / 2600f).toInt().coerceIn(60, 260)
+            val rng = kotlin.random.Random(20260807)
+            repeat(count) {
+                val x = rng.nextFloat() * size.width
+                val y = rng.nextFloat() * size.height
+                val t = rng.nextFloat().let { it * it * it }
+                val radius = (0.6f + t * 1.5f).dp.toPx()
+                val alpha = (0.14f + t * 0.62f) * spec.starAlpha
+                drawCircle(color = onBg.copy(alpha = alpha), radius = radius, center = Offset(x, y))
             }
         }
     }
