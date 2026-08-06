@@ -72,7 +72,20 @@ fun OnboardingScreen(
     // remember, a user who had reached the last step — or picked a birth date — was thrown back to
     // WELCOME with the date silently gone. That cost nothing before this flow collected input;
     // now it does. LocalDate is not Saveable, so the epoch day is stored instead.
-    var step by rememberSaveable { mutableIntStateOf(0) }
+    // Start past the welcome step when this app already holds the HOME role: that step asks one
+    // question ("make me your home app?") which is then already answered. This matters most on
+    // the path that exposed the skipped-onboarding bug — the user grants the role, the system
+    // bounces them to the launcher, the launcher sends them back here — where re-asking would
+    // make them tap "SET AS HOME APP" a second time to get past a step with nothing left to do.
+    val startStep = remember {
+        val alreadyHome = runCatching {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                context.getSystemService(android.app.role.RoleManager::class.java)
+                    ?.isRoleHeld(android.app.role.RoleManager.ROLE_HOME) == true
+        }.getOrDefault(false)
+        if (alreadyHome) 1 else 0
+    }
+    var step by rememberSaveable { mutableIntStateOf(startStep) }
     var birthDateEpochDay by rememberSaveable { mutableStateOf<Long?>(null) }
     val birthDate: LocalDate? = birthDateEpochDay?.let { LocalDate.ofEpochDay(it) }
     var showDatePicker by rememberSaveable { mutableStateOf(false) }
